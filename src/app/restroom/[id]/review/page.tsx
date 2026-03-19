@@ -1,15 +1,26 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ReviewForm } from "@/components/restroom/review-form";
+import { getRestroomById } from "@/lib/api";
 import { mockRestrooms } from "@/lib/mock-data";
 
 export default function WriteReviewPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
-  const restroom = mockRestrooms.find((r) => r.id === id);
+  const [restroomName, setRestroomName] = useState("");
+
+  useEffect(() => {
+    getRestroomById(id)
+      .then((r) => setRestroomName(r?.name ?? ""))
+      .catch(() => {
+        const mock = mockRestrooms.find((r) => r.id === id);
+        setRestroomName(mock?.name ?? "");
+      });
+  }, [id]);
 
   return (
     <div className="flex flex-col">
@@ -21,10 +32,11 @@ export default function WriteReviewPage() {
       </header>
 
       <div className="px-4 pt-4">
-        {restroom && (
-          <p className="mb-4 text-sm text-muted-foreground">{restroom.name}</p>
+        {restroomName && (
+          <p className="mb-4 text-sm text-muted-foreground">{restroomName}</p>
         )}
         <ReviewForm
+          restroomId={id}
           onSubmit={() => {
             setTimeout(() => router.back(), 2000);
           }}
