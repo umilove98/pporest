@@ -14,7 +14,7 @@ export function RestroomCard({ restroom }: { restroom: Restroom }) {
             <div className="flex-1">
               <div className="flex items-center gap-2">
                 <h3 className="font-semibold text-sm leading-tight">{restroom.name}</h3>
-                {restroom.isOpen ? (
+                {restroom.is_open ? (
                   <Badge variant="secondary" className="shrink-0 bg-green-100 text-green-700 text-[10px] px-1.5 py-0">
                     영업중
                   </Badge>
@@ -31,7 +31,7 @@ export function RestroomCard({ restroom }: { restroom: Restroom }) {
               <div className="mt-2 flex items-center gap-2">
                 <StarRating rating={restroom.rating} />
                 <span className="text-xs text-muted-foreground">
-                  {restroom.rating} ({restroom.reviewCount})
+                  {restroom.rating} ({restroom.review_count})
                 </span>
               </div>
               <div className="mt-2 flex flex-wrap gap-1">

@@ -13,14 +13,14 @@ export function ReviewCard({ review }: { review: Review }) {
           </div>
           <div className="flex-1">
             <div className="flex items-center justify-between">
-              <span className="text-sm font-medium">{review.userName}</span>
-              <span className="text-xs text-muted-foreground">{review.createdAt}</span>
+              <span className="text-sm font-medium">{review.user_name}</span>
+              <span className="text-xs text-muted-foreground">{review.created_at}</span>
             </div>
             <StarRating rating={review.rating} />
           </div>
         </div>
         <p className="mt-3 text-sm leading-relaxed">{review.comment}</p>
-        {review.hasPhoto && (
+        {review.has_photo && (
           <div className="mt-3 flex h-24 w-24 items-center justify-center rounded-md bg-muted">
             <Camera className="h-6 w-6 text-muted-foreground" />
           </div>

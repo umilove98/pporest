@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft, MapPin, Clock } from "lucide-react";
@@ -9,13 +10,44 @@ import { Separator } from "@/components/ui/separator";
 import { StarRating } from "@/components/restroom/star-rating";
 import { PhotoGrid } from "@/components/restroom/photo-grid";
 import { ReviewCard } from "@/components/restroom/review-card";
+import { getRestroomById, getReviewsByRestroomId } from "@/lib/api";
 import { mockRestrooms, mockReviews } from "@/lib/mock-data";
+import { Restroom, Review } from "@/lib/types";
 
 export default function RestroomDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
-  const restroom = mockRestrooms.find((r) => r.id === id);
-  const reviews = mockReviews.filter((r) => r.restroomId === id);
+  const [restroom, setRestroom] = useState<Restroom | null>(null);
+  const [reviews, setReviews] = useState<Review[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function fetchData() {
+      try {
+        const [r, revs] = await Promise.all([
+          getRestroomById(id),
+          getReviewsByRestroomId(id),
+        ]);
+        setRestroom(r);
+        setReviews(revs);
+      } catch {
+        // Supabase 미연결 시 mock 데이터 사용
+        setRestroom(mockRestrooms.find((r) => r.id === id) ?? null);
+        setReviews(mockReviews.filter((r) => r.restroom_id === id));
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchData();
+  }, [id]);
+
+  if (loading) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <p className="text-sm text-muted-foreground">로딩 중...</p>
+      </div>
+    );
+  }
 
   if (!restroom) {
     return (
@@ -43,7 +75,7 @@ export default function RestroomDetailPage() {
               <StarRating rating={restroom.rating} size="md" />
               <span className="ml-1 text-lg font-bold">{restroom.rating}</span>
             </div>
-            <span className="text-sm text-muted-foreground">({restroom.reviewCount} 리뷰)</span>
+            <span className="text-sm text-muted-foreground">({restroom.review_count} 리뷰)</span>
           </div>
 
           <div className="mt-2 flex items-center gap-1 text-sm text-muted-foreground">
@@ -53,7 +85,7 @@ export default function RestroomDetailPage() {
 
           <div className="mt-1 flex items-center gap-1 text-sm text-muted-foreground">
             <Clock className="h-4 w-4 shrink-0" />
-            {restroom.isOpen ? (
+            {restroom.is_open ? (
               <span className="text-green-600">현재 이용 가능</span>
             ) : (
               <span className="text-red-500">현재 이용 불가</span>

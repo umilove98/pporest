@@ -5,25 +5,62 @@ import { Camera, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { StarRating } from "./star-rating";
+import { createReview } from "@/lib/api";
+import { useAuth } from "@/components/auth/auth-provider";
 
-export function ReviewForm({ onSubmit }: { onSubmit?: (review: { rating: number; comment: string }) => void }) {
+interface ReviewFormProps {
+  restroomId: string;
+  onSubmit?: () => void;
+}
+
+export function ReviewForm({ restroomId, onSubmit }: ReviewFormProps) {
+  const { user } = useAuth();
   const [rating, setRating] = useState(0);
   const [comment, setComment] = useState("");
   const [submitted, setSubmitted] = useState(false);
   const [photoAdded, setPhotoAdded] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (rating === 0) return;
-    onSubmit?.({ rating, comment });
-    setSubmitted(true);
-    setTimeout(() => {
-      setSubmitted(false);
-      setRating(0);
-      setComment("");
-      setPhotoAdded(false);
-    }, 2000);
+    setLoading(true);
+    setError("");
+
+    try {
+      if (user) {
+        await createReview({
+          restroom_id: restroomId,
+          user_id: user.id,
+          user_name: user.user_metadata?.user_name || user.email || "익명",
+          rating,
+          comment,
+          has_photo: photoAdded,
+        });
+      }
+      setSubmitted(true);
+      onSubmit?.();
+      setTimeout(() => {
+        setSubmitted(false);
+        setRating(0);
+        setComment("");
+        setPhotoAdded(false);
+      }, 2000);
+    } catch {
+      setError("리뷰 등록에 실패했습니다. 다시 시도해주세요.");
+    } finally {
+      setLoading(false);
+    }
   };
+
+  if (!user) {
+    return (
+      <div className="flex flex-col items-center gap-3 py-8">
+        <p className="text-sm text-muted-foreground">리뷰를 작성하려면 로그인이 필요합니다.</p>
+      </div>
+    );
+  }
 
   if (submitted) {
     return (
@@ -70,8 +107,10 @@ export function ReviewForm({ onSubmit }: { onSubmit?: (review: { rating: number;
         )}
       </div>
 
-      <Button type="submit" className="w-full" disabled={rating === 0}>
-        리뷰 등록하기
+      {error && <p className="text-sm text-red-500">{error}</p>}
+
+      <Button type="submit" className="w-full" disabled={rating === 0 || loading}>
+        {loading ? "등록 중..." : "리뷰 등록하기"}
       </Button>
     </form>
   );
