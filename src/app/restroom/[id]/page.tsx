@@ -15,7 +15,7 @@ export default function RestroomDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const restroom = mockRestrooms.find((r) => r.id === id);
-  const reviews = mockReviews.filter((r) => r.restroomId === id);
+  const reviews = mockReviews.filter((r) => r.restroom_id === id);
 
   if (!restroom) {
     return (
@@ -43,7 +43,7 @@ export default function RestroomDetailPage() {
               <StarRating rating={restroom.rating} size="md" />
               <span className="ml-1 text-lg font-bold">{restroom.rating}</span>
             </div>
-            <span className="text-sm text-muted-foreground">({restroom.reviewCount} 리뷰)</span>
+            <span className="text-sm text-muted-foreground">({restroom.review_count} 리뷰)</span>
           </div>
 
           <div className="mt-2 flex items-center gap-1 text-sm text-muted-foreground">
@@ -53,7 +53,7 @@ export default function RestroomDetailPage() {
 
           <div className="mt-1 flex items-center gap-1 text-sm text-muted-foreground">
             <Clock className="h-4 w-4 shrink-0" />
-            {restroom.isOpen ? (
+            {restroom.is_open ? (
               <span className="text-green-600">현재 이용 가능</span>
             ) : (
               <span className="text-red-500">현재 이용 불가</span>

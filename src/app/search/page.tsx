@@ -24,7 +24,7 @@ export default function SearchPage() {
     const matchesFilters =
       activeFilters.length === 0 ||
       activeFilters.every((f) => {
-        if (f === "영업중") return r.isOpen;
+        if (f === "영업중") return r.is_open;
         return r.tags.includes(f);
       });
     return matchesQuery && matchesFilters;
