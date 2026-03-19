@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import { MobileShell } from "@/components/layout/mobile-shell";
+import { AuthProvider } from "@/components/auth/auth-provider";
 import "./globals.css";
 
 const geistSans = localFont({
@@ -29,7 +30,9 @@ export default function RootLayout({
   return (
     <html lang="ko">
       <body className={`${geistSans.variable} font-sans antialiased`}>
-        <MobileShell>{children}</MobileShell>
+        <AuthProvider>
+          <MobileShell>{children}</MobileShell>
+        </AuthProvider>
       </body>
     </html>
   );

@@ -1,10 +1,23 @@
 "use client";
 
-import { User, MessageSquare, Camera } from "lucide-react";
+import { User, MessageSquare, Camera, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import { LoginForm } from "@/components/auth/login-form";
+import { useAuth } from "@/components/auth/auth-provider";
+import { signOut } from "@/lib/auth";
 
 export default function ProfilePage() {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <p className="text-sm text-muted-foreground">로딩 중...</p>
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col">
       <header className="sticky top-0 z-40 border-b bg-background px-4 py-3">
@@ -12,32 +25,58 @@ export default function ProfilePage() {
       </header>
 
       <div className="flex flex-col items-center px-4 pt-8">
-        {/* Avatar */}
-        <div className="flex h-20 w-20 items-center justify-center rounded-full bg-muted">
-          <User className="h-10 w-10 text-muted-foreground" />
-        </div>
-        <h2 className="mt-3 text-lg font-semibold">게스트 사용자</h2>
-        <p className="text-sm text-muted-foreground">로그인하여 리뷰를 관리하세요</p>
+        {user ? (
+          <>
+            {/* 로그인된 상태 */}
+            <div className="flex h-20 w-20 items-center justify-center rounded-full bg-muted">
+              <User className="h-10 w-10 text-muted-foreground" />
+            </div>
+            <h2 className="mt-3 text-lg font-semibold">
+              {user.user_metadata?.user_name || user.email}
+            </h2>
+            <p className="text-sm text-muted-foreground">{user.email}</p>
 
-        {/* Stats */}
-        <div className="mt-6 flex w-full gap-4">
-          <div className="flex flex-1 flex-col items-center rounded-lg border p-4">
-            <MessageSquare className="h-5 w-5 text-muted-foreground" />
-            <span className="mt-1 text-xl font-bold">0</span>
-            <span className="text-xs text-muted-foreground">리뷰</span>
-          </div>
-          <div className="flex flex-1 flex-col items-center rounded-lg border p-4">
-            <Camera className="h-5 w-5 text-muted-foreground" />
-            <span className="mt-1 text-xl font-bold">0</span>
-            <span className="text-xs text-muted-foreground">사진</span>
-          </div>
-        </div>
+            {/* Stats */}
+            <div className="mt-6 flex w-full gap-4">
+              <div className="flex flex-1 flex-col items-center rounded-lg border p-4">
+                <MessageSquare className="h-5 w-5 text-muted-foreground" />
+                <span className="mt-1 text-xl font-bold">0</span>
+                <span className="text-xs text-muted-foreground">리뷰</span>
+              </div>
+              <div className="flex flex-1 flex-col items-center rounded-lg border p-4">
+                <Camera className="h-5 w-5 text-muted-foreground" />
+                <span className="mt-1 text-xl font-bold">0</span>
+                <span className="text-xs text-muted-foreground">사진</span>
+              </div>
+            </div>
 
-        <Separator className="my-6" />
+            <Separator className="my-6" />
 
-        <Button className="w-full" disabled>
-          로그인 (준비 중)
-        </Button>
+            <Button
+              variant="outline"
+              className="w-full gap-2"
+              onClick={() => signOut()}
+            >
+              <LogOut className="h-4 w-4" />
+              로그아웃
+            </Button>
+          </>
+        ) : (
+          <>
+            {/* 비로그인 상태 */}
+            <div className="flex h-20 w-20 items-center justify-center rounded-full bg-muted">
+              <User className="h-10 w-10 text-muted-foreground" />
+            </div>
+            <h2 className="mt-3 text-lg font-semibold">게스트 사용자</h2>
+            <p className="mb-6 text-sm text-muted-foreground">
+              로그인하여 리뷰를 관리하세요
+            </p>
+
+            <div className="w-full">
+              <LoginForm />
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
