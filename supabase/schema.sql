@@ -40,6 +40,27 @@ create table if not exists edit_requests (
   created_at timestamptz default now()
 );
 
+-- 7. 안전 확인 (오늘도 안전해요!)
+create table if not exists safety_checks (
+  id uuid primary key default gen_random_uuid(),
+  restroom_id text not null,
+  user_id uuid not null references auth.users(id),
+  checked_date date not null default current_date,
+  created_at timestamptz default now(),
+  unique(restroom_id, user_id, checked_date)
+);
+
+create index if not exists idx_safety_checks_restroom_date on safety_checks(restroom_id, checked_date);
+
+-- 안전 확인 집계 뷰
+create or replace view safety_stats as
+select
+  restroom_id,
+  checked_date,
+  count(*)::int as check_count
+from safety_checks
+group by restroom_id, checked_date;
+
 -- 2. 리뷰 (공공데이터/유저등록 화장실 모두 대상)
 --    restroom_id: 공공데이터는 "pd-1" 형태, 유저등록은 uuid
 create table if not exists reviews (
@@ -95,3 +116,14 @@ create policy "reviews_update" on reviews
 
 create policy "reviews_delete" on reviews
   for delete using (auth.uid() = user_id);
+
+-- 안전 확인 RLS
+alter table safety_checks enable row level security;
+
+-- 누구나 안전 확인 횟수 조회 가능
+create policy "safety_checks_select" on safety_checks
+  for select using (true);
+
+-- 로그인한 사용자만 안전 확인 가능
+create policy "safety_checks_insert" on safety_checks
+  for insert with check (auth.uid() = user_id);

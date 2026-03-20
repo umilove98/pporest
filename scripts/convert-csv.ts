@@ -75,6 +75,12 @@ interface PublicRestroom {
   disabled: boolean;
   diaper: boolean;
   hours: string | null;
+  male_toilet: number;
+  male_urinal: number;
+  female_toilet: number;
+  emergency_bell: boolean;
+  cctv: boolean;
+  data_date: string | null;
 }
 
 function processCSV(filePath: string, startId: number): { results: PublicRestroom[]; skipped: number } {
@@ -92,9 +98,15 @@ function processCSV(filePath: string, startId: number): { results: PublicRestroo
   const iJibunAddr = col("소재지지번주소");
   const iLat = col("위도");
   const iLng = col("경도");
+  const iMaleToilet = col("남성용-대변기수");
+  const iMaleUrinal = col("남성용-소변기수");
   const iMaleDisabled = col("남성용-장애인용대변기수");
+  const iFemaleToilet = col("여성용-대변기수");
   const iFemaleDisabled = col("여성용-장애인용대변기수");
   const iDiaper = col("기저귀교환대");
+  const iEmergencyBell = col("비상벨설치여부");
+  const iCCTV = col("CCTV설치");
+  const iDataDate = col("데이터기준일자");
   const iHours = col("개방시간상세");
   const iHoursBasic = col("개방시간");
 
@@ -119,9 +131,15 @@ function processCSV(filePath: string, startId: number): { results: PublicRestroo
     if (!name || !address || isNaN(lat) || isNaN(lng) || lat === 0 || lng === 0) { skipped++; continue; }
     if (lat < 33 || lat > 39 || lng < 124 || lng > 132) { skipped++; continue; }
 
+    const maleToilet = iMaleToilet !== -1 ? parseInt(f[iMaleToilet]) || 0 : 0;
+    const maleUrinal = iMaleUrinal !== -1 ? parseInt(f[iMaleUrinal]) || 0 : 0;
     const mDisabled = iMaleDisabled !== -1 ? parseInt(f[iMaleDisabled]) || 0 : 0;
+    const femaleToilet = iFemaleToilet !== -1 ? parseInt(f[iFemaleToilet]) || 0 : 0;
     const fDisabled = iFemaleDisabled !== -1 ? parseInt(f[iFemaleDisabled]) || 0 : 0;
     const diaperField = iDiaper !== -1 ? f[iDiaper] : "";
+    const bellField = iEmergencyBell !== -1 ? f[iEmergencyBell] : "";
+    const cctvField = iCCTV !== -1 ? f[iCCTV] : "";
+    const dataDate = iDataDate !== -1 ? f[iDataDate] || null : null;
     const hours = (iHours !== -1 ? f[iHours] : "") || (iHoursBasic !== -1 ? f[iHoursBasic] : "") || null;
 
     results.push({
@@ -133,6 +151,12 @@ function processCSV(filePath: string, startId: number): { results: PublicRestroo
       disabled: mDisabled > 0 || fDisabled > 0,
       diaper: diaperField !== "" && diaperField !== "해당없음" && diaperField !== "없음",
       hours,
+      male_toilet: maleToilet,
+      male_urinal: maleUrinal,
+      female_toilet: femaleToilet,
+      emergency_bell: bellField === "Y" || bellField === "있음",
+      cctv: cctvField === "Y" || cctvField === "있음",
+      data_date: dataDate,
     });
   }
 

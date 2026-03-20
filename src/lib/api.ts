@@ -44,6 +44,12 @@ export function toRestroom(
     has_bidet: false,
     is_free: true,
     open_hours: p.hours,
+    male_toilet: p.male_toilet,
+    male_urinal: p.male_urinal,
+    female_toilet: p.female_toilet,
+    emergency_bell: p.emergency_bell,
+    cctv: p.cctv,
+    data_date: p.data_date,
     created_at: "",
     rating: stats?.rating ?? 0,
     review_count: stats?.review_count ?? 0,
@@ -257,4 +263,59 @@ export async function createEditRequest(req: {
 
     return newReq;
   }
+}
+
+// === 안전 확인 (오늘도 안전해요!) ===
+
+function getTodayStr(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+/**
+ * 오늘의 안전 확인 횟수 조회
+ */
+export async function getSafetyCount(restroomId: string): Promise<number> {
+  const today = getTodayStr();
+  const { count, error } = await supabase
+    .from("safety_checks")
+    .select("*", { count: "exact", head: true })
+    .eq("restroom_id", restroomId)
+    .eq("checked_date", today);
+
+  if (error) return 0;
+  return count ?? 0;
+}
+
+/**
+ * 안전 확인 등록 (1일 1회, unique 제약으로 중복 방지)
+ */
+export async function checkSafety(restroomId: string, userId: string): Promise<boolean> {
+  const today = getTodayStr();
+  const { error } = await supabase
+    .from("safety_checks")
+    .insert({
+      restroom_id: restroomId,
+      user_id: userId,
+      checked_date: today,
+    });
+
+  // unique 제약 위반 = 이미 오늘 체크함
+  if (error) return false;
+  return true;
+}
+
+/**
+ * 오늘 이미 확인했는지 여부
+ */
+export async function hasCheckedSafetyToday(restroomId: string, userId: string): Promise<boolean> {
+  const today = getTodayStr();
+  const { count, error } = await supabase
+    .from("safety_checks")
+    .select("*", { count: "exact", head: true })
+    .eq("restroom_id", restroomId)
+    .eq("user_id", userId)
+    .eq("checked_date", today);
+
+  if (error) return false;
+  return (count ?? 0) > 0;
 }

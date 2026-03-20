@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { ChevronLeft, MapPin, Clock, Accessibility, Baby, Droplets, Banknote, PenLine, CheckCircle } from "lucide-react";
+import { ChevronLeft, MapPin, Clock, Accessibility, Baby, Droplets, Banknote, PenLine, CheckCircle, Bell, Video, DoorOpen, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
@@ -11,7 +11,7 @@ import { StarRating } from "@/components/restroom/star-rating";
 import { PhotoGrid } from "@/components/restroom/photo-grid";
 import { ReviewCard } from "@/components/restroom/review-card";
 import { Input } from "@/components/ui/input";
-import { loadPublicRestrooms, toRestroom, getReviewsByKey, createEditRequest } from "@/lib/api";
+import { loadPublicRestrooms, toRestroom, getReviewsByKey, createEditRequest, getSafetyCount, checkSafety, hasCheckedSafetyToday } from "@/lib/api";
 import { useAuth } from "@/components/auth/auth-provider";
 import { mockRestrooms, mockReviews } from "@/lib/mock-data";
 import { Restroom, Review } from "@/lib/types";
@@ -30,6 +30,9 @@ export default function RestroomDetailPage() {
   const [editReason, setEditReason] = useState("");
   const [editSubmitting, setEditSubmitting] = useState(false);
   const [editSubmitted, setEditSubmitted] = useState(false);
+  const [safetyCount, setSafetyCount] = useState(0);
+  const [alreadyChecked, setAlreadyChecked] = useState(false);
+  const [safetyAnim, setSafetyAnim] = useState(false);
 
   useEffect(() => {
     async function fetchData() {
@@ -62,6 +65,19 @@ export default function RestroomDetailPage() {
     fetchData();
   }, [id]);
 
+  // 안전 확인 데이터 로드
+  useEffect(() => {
+    async function loadSafety() {
+      const [count, checked] = await Promise.all([
+        getSafetyCount(id),
+        user ? hasCheckedSafetyToday(id, user.id) : Promise.resolve(false),
+      ]);
+      setSafetyCount(count);
+      setAlreadyChecked(checked);
+    }
+    loadSafety();
+  }, [id, user]);
+
   const EDITABLE_FIELDS = [
     { key: "name", label: "화장실 이름" },
     { key: "address", label: "주소" },
@@ -70,6 +86,17 @@ export default function RestroomDetailPage() {
     { key: "has_disabled_access", label: "장애인 접근 가능" },
     { key: "has_diaper_table", label: "기저귀 교환대" },
   ];
+
+  const handleSafetyCheck = async () => {
+    if (!user || alreadyChecked) return;
+    const success = await checkSafety(id, user.id);
+    if (success) {
+      setSafetyCount((prev) => prev + 1);
+      setAlreadyChecked(true);
+      setSafetyAnim(true);
+      setTimeout(() => setSafetyAnim(false), 1000);
+    }
+  };
 
   const handleEditSubmit = async () => {
     if (!user || !editSuggestedValue.trim()) return;
@@ -171,6 +198,18 @@ export default function RestroomDetailPage() {
                 <span>무료</span>
               </div>
             )}
+            {restroom.emergency_bell && (
+              <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                <Bell className="h-4 w-4 text-amber-500" />
+                <span>비상벨</span>
+              </div>
+            )}
+            {restroom.cctv && (
+              <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                <Video className="h-4 w-4 text-slate-500" />
+                <span>CCTV</span>
+              </div>
+            )}
           </div>
 
           <div className="mt-3 flex flex-wrap gap-1.5">
@@ -187,16 +226,37 @@ export default function RestroomDetailPage() {
           </div>
         </div>
 
-        {/* 칸 수 / 성별 구분 (유저 등록 화장실인 경우) */}
-        {restroom.gender_type && (
-          <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
-            <span>
-              {restroom.gender_type === "mixed" ? "남녀공용" :
-               restroom.gender_type === "separated" ? "남녀분리" :
-               restroom.gender_type === "male_only" ? "남자화장실" : "여자화장실"}
-            </span>
-            {restroom.male_stalls != null && <span>남자 {restroom.male_stalls}칸</span>}
-            {restroom.female_stalls != null && <span>여자 {restroom.female_stalls}칸</span>}
+        {/* 칸 수 정보 */}
+        {(restroom.male_toilet || restroom.male_urinal || restroom.female_toilet || restroom.gender_type) && (
+          <div className="flex flex-col gap-2">
+            {restroom.gender_type && (
+              <span className="text-xs text-muted-foreground">
+                {restroom.gender_type === "mixed" ? "남녀공용" :
+                 restroom.gender_type === "separated" ? "남녀분리" :
+                 restroom.gender_type === "male_only" ? "남자화장실" : "여자화장실"}
+                {restroom.male_stalls != null && ` · 남자 ${restroom.male_stalls}칸`}
+                {restroom.female_stalls != null && ` · 여자 ${restroom.female_stalls}칸`}
+              </span>
+            )}
+            {(restroom.male_toilet || restroom.male_urinal || restroom.female_toilet) ? (
+              <div className="flex gap-2">
+                {(restroom.male_toilet || restroom.male_urinal) ? (
+                  <div className="flex items-center gap-1.5 rounded-lg bg-blue-50 px-3 py-2 text-xs">
+                    <DoorOpen className="h-3.5 w-3.5 text-blue-500" />
+                    <span className="font-medium text-blue-700">남자</span>
+                    {restroom.male_toilet ? <span>대변기 {restroom.male_toilet}</span> : null}
+                    {restroom.male_urinal ? <span>소변기 {restroom.male_urinal}</span> : null}
+                  </div>
+                ) : null}
+                {restroom.female_toilet ? (
+                  <div className="flex items-center gap-1.5 rounded-lg bg-pink-50 px-3 py-2 text-xs">
+                    <DoorOpen className="h-3.5 w-3.5 text-pink-500" />
+                    <span className="font-medium text-pink-700">여자</span>
+                    <span>대변기 {restroom.female_toilet}</span>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         )}
 
@@ -303,6 +363,49 @@ export default function RestroomDetailPage() {
 
         <Separator />
 
+        {/* 안전 확인 */}
+        <div className="rounded-xl border bg-gradient-to-r from-emerald-50 to-green-50 p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-1">
+              <div className="flex items-center gap-1.5">
+                <ShieldCheck className={`h-5 w-5 text-emerald-500 ${safetyAnim ? "animate-bounce" : ""}`} />
+                <span className="text-sm font-semibold text-emerald-800">안전 확인</span>
+              </div>
+              {safetyCount > 0 ? (
+                <p className="text-xs text-emerald-700">
+                  오늘 <span className="font-bold">{safetyCount}명</span>이 안전하다고 확인했습니다
+                </p>
+              ) : (
+                <p className="text-xs text-muted-foreground">아직 오늘의 안전 확인이 없습니다</p>
+              )}
+            </div>
+            {user ? (
+              <Button
+                size="sm"
+                onClick={handleSafetyCheck}
+                disabled={alreadyChecked}
+                className={alreadyChecked
+                  ? "bg-emerald-100 text-emerald-600 hover:bg-emerald-100"
+                  : "bg-emerald-500 hover:bg-emerald-600"
+                }
+              >
+                {alreadyChecked ? "확인 완료" : "오늘도 안전해요!"}
+              </Button>
+            ) : (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => router.push("/profile")}
+                className="text-xs"
+              >
+                로그인하고 확인
+              </Button>
+            )}
+          </div>
+        </div>
+
+        <Separator />
+
         {/* Reviews */}
         <div>
           <div className="mb-3 flex items-center justify-between">
@@ -319,6 +422,13 @@ export default function RestroomDetailPage() {
             )}
           </div>
         </div>
+
+        {/* 데이터 기준일자 */}
+        {restroom.data_date && (
+          <p className="text-[10px] text-muted-foreground/60 text-right">
+            정보 기준일: {restroom.data_date}
+          </p>
+        )}
       </div>
 
       {/* Sticky bottom CTA */}
