@@ -138,8 +138,8 @@ export default function NewRestroomPage() {
       setSearching(true);
       const geocoder = new window.kakao.maps.services.Geocoder();
       geocoder.addressSearch(query, (result, status) => {
-        setSearching(false);
         if (status === window.kakao.maps.services.Status.OK && result.length > 0) {
+          setSearching(false);
           setAddressResults(
             result.map((r) => ({
               address: r.road_address_name || r.address_name,
@@ -149,8 +149,23 @@ export default function NewRestroomPage() {
           );
           setShowResults(true);
         } else {
-          setAddressResults([]);
-          setShowResults(true);
+          // 주소 검색 결과 없으면 장소 키워드 검색으로 폴백
+          const places = new window.kakao.maps.services.Places();
+          places.keywordSearch(query, (placeResult, placeStatus) => {
+            setSearching(false);
+            if (placeStatus === window.kakao.maps.services.Status.OK && placeResult.length > 0) {
+              setAddressResults(
+                placeResult.map((r) => ({
+                  address: r.place_name + " · " + (r.road_address_name || r.address_name),
+                  lat: parseFloat(r.y),
+                  lng: parseFloat(r.x),
+                }))
+              );
+            } else {
+              setAddressResults([]);
+            }
+            setShowResults(true);
+          });
         }
       });
     }, 300);
@@ -340,7 +355,7 @@ export default function NewRestroomPage() {
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
-                  placeholder="도로명 또는 지번 주소 입력..."
+                  placeholder="주소 또는 건물명 검색..."
                   className="pl-9 pr-9"
                   value={addressQuery}
                   onChange={(e) => handleAddressSearch(e.target.value)}
