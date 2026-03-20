@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import Script from "next/script";
 import { ArrowLeft, MapPin, CheckCircle, Loader2, Camera, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,10 +20,10 @@ const FACILITY_OPTIONS = [
 const TAG_OPTIONS = ["무료", "24시간", "깨끗함", "장애인 접근 가능", "비데", "기저귀 교환대"];
 
 const GENDER_OPTIONS = [
-  { value: "mixed", label: "남녀공용" },
   { value: "separated", label: "남녀분리" },
-  { value: "male_only", label: "남자전용" },
-  { value: "female_only", label: "여자전용" },
+  { value: "mixed", label: "남녀공용" },
+  { value: "male_only", label: "남자화장실" },
+  { value: "female_only", label: "여자화장실" },
 ] as const;
 
 type FacilityKey = (typeof FACILITY_OPTIONS)[number]["key"];
@@ -45,13 +46,50 @@ export default function NewRestroomPage() {
   });
   const [isFree, setIsFree] = useState(true);
   const [openHours, setOpenHours] = useState("");
-  const [genderType, setGenderType] = useState<GenderType>("mixed");
+  const [genderType, setGenderType] = useState<GenderType>("separated");
   const [maleStalls, setMaleStalls] = useState("");
   const [femaleStalls, setFemaleStalls] = useState("");
   const [photos, setPhotos] = useState<{ file: File; preview: string }[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [useCurrentLocation, setUseCurrentLocation] = useState(false);
+  const [kakaoReady, setKakaoReady] = useState(false);
+  // 좌표를 먼저 받고, SDK 로드 후 역지오코딩 실행
+  const pendingCoords = useRef<{ lat: number; lng: number } | null>(null);
+
+  const KAKAO_API_KEY = process.env.NEXT_PUBLIC_KAKAO_MAP_API_KEY;
+
+  // 이미 Kakao SDK 로드된 경우 (홈에서 이동 등)
+  useEffect(() => {
+    if (window.kakao?.maps?.services) {
+      setKakaoReady(true);
+    }
+  }, []);
+
+  const handleKakaoLoad = useCallback(() => {
+    if (window.kakao?.maps) {
+      window.kakao.maps.load(() => {
+        setKakaoReady(true);
+        // SDK 로드 완료 후, 대기 중이던 좌표가 있으면 역지오코딩 실행
+        if (pendingCoords.current) {
+          const { lat: pLat, lng: pLng } = pendingCoords.current;
+          pendingCoords.current = null;
+          doReverseGeocode(pLat, pLng);
+        }
+      });
+    }
+  }, []);
+
+  const doReverseGeocode = (latitude: number, longitude: number) => {
+    if (!window.kakao?.maps?.services) return;
+    const geocoder = new window.kakao.maps.services.Geocoder();
+    geocoder.coord2Address(longitude, latitude, (result, status) => {
+      if (status === window.kakao.maps.services.Status.OK && result[0]) {
+        const addr = result[0].road_address?.address_name || result[0].address.address_name;
+        setAddress(addr);
+      }
+    });
+  };
 
   // 현재 위치 가져오기
   const handleUseCurrentLocation = useCallback(() => {
@@ -59,23 +97,21 @@ export default function NewRestroomPage() {
     setUseCurrentLocation(true);
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        setLat(pos.coords.latitude);
-        setLng(pos.coords.longitude);
-        if (window.kakao?.maps?.services) {
-          const geocoder = new window.kakao.maps.services.Geocoder();
-          geocoder.coord2Address(pos.coords.longitude, pos.coords.latitude, (result, status) => {
-            if (status === window.kakao.maps.services.Status.OK && result[0]) {
-              const addr = result[0].road_address?.address_name || result[0].address.address_name;
-              setAddress(addr);
-            }
-          });
+        const { latitude, longitude } = pos.coords;
+        setLat(latitude);
+        setLng(longitude);
+        if (kakaoReady) {
+          doReverseGeocode(latitude, longitude);
+        } else {
+          // SDK 아직 안 로드됨 → 좌표 저장해두고 로드 완료 시 실행
+          pendingCoords.current = { lat: latitude, lng: longitude };
         }
         setUseCurrentLocation(false);
       },
       () => setUseCurrentLocation(false),
       { enableHighAccuracy: true, timeout: 10000 }
     );
-  }, []);
+  }, [kakaoReady]);
 
   const toggleTag = (tag: string) => {
     setSelectedTags((prev) =>
@@ -194,6 +230,14 @@ export default function NewRestroomPage() {
 
   return (
     <div className="flex flex-col">
+      {/* Kakao SDK 로드 (역지오코딩용 — 이미 로드된 경우 중복 로드 안 함) */}
+      {KAKAO_API_KEY && !kakaoReady && (
+        <Script
+          src={`//dapi.kakao.com/v2/maps/sdk.js?appkey=${KAKAO_API_KEY}&libraries=services&autoload=false`}
+          onLoad={handleKakaoLoad}
+        />
+      )}
+
       <header className="sticky top-0 z-40 flex items-center gap-3 border-b bg-background px-4 py-3">
         <button onClick={() => router.back()}>
           <ArrowLeft className="h-5 w-5" />

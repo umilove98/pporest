@@ -15,6 +15,7 @@ export default function HomePage() {
   const [restrooms, setRestrooms] = useState<Restroom[]>(mockRestrooms);
   const [loading, setLoading] = useState(true);
   const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [locationReady, setLocationReady] = useState(false);
   const [currentAddress, setCurrentAddress] = useState<string | null>(null);
   const [mapBounds, setMapBounds] = useState<MapBounds | null>(null);
 
@@ -24,15 +25,21 @@ export default function HomePage() {
 
   // 현재 위치 가져오기
   useEffect(() => {
-    if (!navigator.geolocation) return;
+    if (!navigator.geolocation) {
+      setLocationReady(true);
+      return;
+    }
     navigator.geolocation.getCurrentPosition(
-      (pos) => setLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-      () => {},
+      (pos) => {
+        setLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+        setLocationReady(true);
+      },
+      () => setLocationReady(true),
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
   }, []);
 
-  // 역지오코딩: 좌표 → 주소 변환
+  // 역지오코딩: 좌표 → 주소 (Kakao Maps services)
   useEffect(() => {
     if (!location) return;
     const tryGeocode = () => {
@@ -113,13 +120,19 @@ export default function HomePage() {
         <h1 className="text-lg"><span className="font-light">PPO</span><span className="font-bold text-emerald-500">Rest</span></h1>
         <div className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
           <MapPin className="h-3 w-3" />
-          <span>{currentAddress ? currentAddress : location ? "현재 위치 확인 중..." : "서울특별시 강남구 근처"}</span>
+          <span>{currentAddress ? currentAddress : "현재 위치 확인 중..."}</span>
         </div>
       </header>
 
       {/* Map */}
       <div className="px-4 pt-4">
-        <MapView restrooms={restroomsWithDistance} userLocation={location} onBoundsChange={handleBoundsChange} />
+        {locationReady ? (
+          <MapView restrooms={restroomsWithDistance} userLocation={location} onBoundsChange={handleBoundsChange} />
+        ) : (
+          <div className="flex h-[300px] items-center justify-center rounded-xl border bg-muted/30">
+            <p className="text-sm text-muted-foreground">위치 확인 중...</p>
+          </div>
+        )}
       </div>
 
       <div className="px-4 py-3">

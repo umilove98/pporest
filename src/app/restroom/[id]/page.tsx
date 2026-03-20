@@ -193,7 +193,7 @@ export default function RestroomDetailPage() {
             <span>
               {restroom.gender_type === "mixed" ? "남녀공용" :
                restroom.gender_type === "separated" ? "남녀분리" :
-               restroom.gender_type === "male_only" ? "남자전용" : "여자전용"}
+               restroom.gender_type === "male_only" ? "남자화장실" : "여자화장실"}
             </span>
             {restroom.male_stalls != null && <span>남자 {restroom.male_stalls}칸</span>}
             {restroom.female_stalls != null && <span>여자 {restroom.female_stalls}칸</span>}
