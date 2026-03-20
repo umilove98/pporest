@@ -117,9 +117,14 @@ NEXT_PUBLIC_KAKAO_MAP_API_KEY=<kakao-map-javascript-key>
 ## Database Setup
 
 - **schema.sql은 참고용 전체 스키마** — 직접 수정하지 말 것
-- **스키마 변경 시 `supabase/migrations/` 폴더에 새 SQL 파일 추가** (예: `007_xxx.sql`)
+- **스키마 변경 시 `supabase/migrations/` 폴더에 새 SQL 파일 추가** (예: `009_xxx.sql`)
 - 번호는 기존 마이그레이션 다음 순번으로 매김
 - 운영 DB에는 해당 마이그레이션 파일만 실행
+- **테이블/뷰 생성 시 반드시 GRANT 포함** — Supabase 마이그레이션으로 만든 테이블은 자동 GRANT가 안 됨
+  - 조회용 테이블/뷰: `grant select on <table> to anon, authenticated;`
+  - 로그인 유저 쓰기: `grant insert on <table> to authenticated;`
+  - 수정/삭제 필요 시: `grant update, delete on <table> to authenticated;`
+  - GRANT 누락 시 클라이언트에서 403 Forbidden 발생
 
 ### 현재 마이그레이션 목록
 | 파일 | 내용 |
@@ -130,6 +135,8 @@ NEXT_PUBLIC_KAKAO_MAP_API_KEY=<kakao-map-javascript-key>
 | `004_add_admin_policies.sql` | admin_users, is_admin(), 관리자 RLS |
 | `005_add_public_restrooms_table.sql` | public_restrooms 테이블 + 인덱스 + GRANT |
 | `006_drop_unused_restrooms.sql` | 레거시 restrooms/restroom_stats 삭제 |
+| `007_grant_admin_users_select.sql` | admin_users SELECT GRANT |
+| `008_grant_all_tables.sql` | 전체 테이블 GRANT 일괄 추가 |
 
 ## Routes
 
