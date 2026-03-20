@@ -263,11 +263,18 @@ export default function RestroomDetailPage() {
           </div>
         )}
 
+        {/* 데이터 기준일자 */}
+        {restroom.data_date && (
+          <p className="text-[10px] text-muted-foreground/60 text-right">
+            정보 기준일: {restroom.data_date}
+          </p>
+        )}
+
         {/* 수정 요청 모달 */}
         {showEditModal && (
           <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40" onClick={() => setShowEditModal(false)}>
             <div
-              className="w-full max-w-md rounded-t-2xl bg-background p-5 pb-8"
+              className="w-full max-w-md rounded-t-2xl bg-background p-5 pb-20 max-h-[85vh] overflow-y-auto"
               onClick={(e) => e.stopPropagation()}
             >
               {editSubmitted ? (
@@ -294,7 +301,11 @@ export default function RestroomDetailPage() {
                             onClick={() => {
                               setEditField(key);
                               const val = restroom[key as keyof Restroom];
-                              setEditCurrentValue(val != null ? String(val) : "");
+                              if (typeof val === "boolean") {
+                                setEditCurrentValue(val ? "예" : "아니오");
+                              } else {
+                                setEditCurrentValue(val != null ? String(val) : "");
+                              }
                             }}
                           >
                             {label}
@@ -413,12 +424,6 @@ export default function RestroomDetailPage() {
           </div>
         </div>
 
-        {/* 데이터 기준일자 */}
-        {restroom.data_date && (
-          <p className="text-[10px] text-muted-foreground/60 text-right">
-            정보 기준일: {restroom.data_date}
-          </p>
-        )}
       </div>
 
       {/* Sticky bottom CTA */}
