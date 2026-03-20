@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { User, MessageSquare, Camera, LogOut, Star } from "lucide-react";
+import Link from "next/link";
+import { User, MessageSquare, Camera, LogOut, Star, Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Card, CardContent } from "@/components/ui/card";
@@ -104,7 +105,13 @@ export default function ProfilePage() {
               )}
             </div>
 
-            <div className="w-full pb-4">
+            <div className="flex w-full flex-col gap-2 pb-4">
+              <Link href="/admin">
+                <Button variant="outline" className="w-full gap-2">
+                  <Shield className="h-4 w-4" />
+                  관리자 페이지
+                </Button>
+              </Link>
               <Button
                 variant="outline"
                 className="w-full gap-2"

@@ -265,6 +265,103 @@ export async function createEditRequest(req: {
   }
 }
 
+// === 관리자 기능 ===
+
+/**
+ * 대기 중인 유저 등록 화장실 목록
+ */
+export async function getPendingRestrooms(): Promise<UserRestroom[]> {
+  try {
+    const { data, error } = await supabase
+      .from("user_restrooms")
+      .select("*")
+      .eq("status", "pending")
+      .order("created_at", { ascending: false });
+
+    if (error) throw error;
+    return (data ?? []) as UserRestroom[];
+  } catch {
+    // localStorage fallback
+    const stored = localStorage.getItem("user_restrooms");
+    const list: UserRestroom[] = stored ? JSON.parse(stored) : [];
+    return list.filter((r) => r.status === "pending");
+  }
+}
+
+/**
+ * 화장실 등록 승인
+ */
+export async function approveRestroom(id: string): Promise<void> {
+  try {
+    const { error } = await supabase
+      .from("user_restrooms")
+      .update({ status: "approved" })
+      .eq("id", id);
+    if (error) throw error;
+  } catch {
+    // localStorage fallback
+    const stored = localStorage.getItem("user_restrooms");
+    const list: UserRestroom[] = stored ? JSON.parse(stored) : [];
+    const updated = list.map((r) => r.id === id ? { ...r, status: "approved" as const } : r);
+    localStorage.setItem("user_restrooms", JSON.stringify(updated));
+  }
+}
+
+/**
+ * 화장실 등록 거절 (삭제)
+ */
+export async function rejectRestroom(id: string): Promise<void> {
+  try {
+    const { error } = await supabase
+      .from("user_restrooms")
+      .delete()
+      .eq("id", id);
+    if (error) throw error;
+  } catch {
+    const stored = localStorage.getItem("user_restrooms");
+    const list: UserRestroom[] = stored ? JSON.parse(stored) : [];
+    localStorage.setItem("user_restrooms", JSON.stringify(list.filter((r) => r.id !== id)));
+  }
+}
+
+/**
+ * 대기 중인 수정 요청 목록
+ */
+export async function getPendingEditRequests(): Promise<EditRequest[]> {
+  try {
+    const { data, error } = await supabase
+      .from("edit_requests")
+      .select("*")
+      .eq("status", "pending")
+      .order("created_at", { ascending: false });
+
+    if (error) throw error;
+    return (data ?? []) as EditRequest[];
+  } catch {
+    const stored = localStorage.getItem("edit_requests");
+    const list: EditRequest[] = stored ? JSON.parse(stored) : [];
+    return list.filter((r) => r.status === "pending");
+  }
+}
+
+/**
+ * 수정 요청 처리 (승인/거절)
+ */
+export async function resolveEditRequest(id: string, status: "approved" | "rejected"): Promise<void> {
+  try {
+    const { error } = await supabase
+      .from("edit_requests")
+      .update({ status })
+      .eq("id", id);
+    if (error) throw error;
+  } catch {
+    const stored = localStorage.getItem("edit_requests");
+    const list: EditRequest[] = stored ? JSON.parse(stored) : [];
+    const updated = list.map((r) => r.id === id ? { ...r, status } : r);
+    localStorage.setItem("edit_requests", JSON.stringify(updated));
+  }
+}
+
 // === 안전 확인 (오늘도 안전해요!) ===
 
 function getTodayStr(): string {
