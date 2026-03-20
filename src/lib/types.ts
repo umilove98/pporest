@@ -26,6 +26,23 @@ export interface UserRestroom {
   has_bidet: boolean;
   is_free: boolean;
   open_hours: string | null;
+  gender_type: "mixed" | "separated" | "male_only" | "female_only";
+  male_stalls: number | null;
+  female_stalls: number | null;
+  photo_urls: string[];
+  created_at: string;
+}
+
+/** 공공데이터 수정 요청 */
+export interface EditRequest {
+  id: string;
+  restroom_id: string;    // 대상 화장실 ID (pd-xxx 또는 uuid)
+  submitted_by: string;
+  field: string;          // 수정 대상 필드명
+  current_value: string;  // 현재 값
+  suggested_value: string; // 제안 값
+  reason: string;
+  status: "pending" | "approved" | "rejected";
   created_at: string;
 }
 
@@ -45,6 +62,10 @@ export interface Restroom {
   has_bidet: boolean;
   is_free: boolean;
   open_hours: string | null;
+  gender_type?: "mixed" | "separated" | "male_only" | "female_only";
+  male_stalls?: number | null;
+  female_stalls?: number | null;
+  photo_urls?: string[];
   created_at: string;
   // 집계 필드 (DB 리뷰에서 조회)
   rating: number;

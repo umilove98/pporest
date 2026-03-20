@@ -1,5 +1,5 @@
 import { supabase } from "./supabase";
-import { PublicRestroom, Restroom, Review, UserRestroom } from "./types";
+import { EditRequest, PublicRestroom, Restroom, Review, UserRestroom } from "./types";
 
 // === 정적 공공데이터 로드 ===
 
@@ -91,19 +91,42 @@ export async function createUserRestroom(restroom: {
   has_bidet: boolean;
   is_free: boolean;
   open_hours: string | null;
+  gender_type: "mixed" | "separated" | "male_only" | "female_only";
+  male_stalls: number | null;
+  female_stalls: number | null;
+  photo_urls: string[];
 }): Promise<UserRestroom> {
-  const { data, error } = await supabase
-    .from("user_restrooms")
-    .insert({
+  // Supabase 연결 시 DB에 저장
+  try {
+    const { data, error } = await supabase
+      .from("user_restrooms")
+      .insert({
+        ...restroom,
+        status: "pending",
+        is_open: true,
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data as UserRestroom;
+  } catch {
+    // Supabase 미연결 시 localStorage fallback
+    const newRestroom: UserRestroom = {
+      id: `local-${Date.now()}`,
       ...restroom,
       status: "pending",
       is_open: true,
-    })
-    .select()
-    .single();
+      created_at: new Date().toISOString(),
+    };
 
-  if (error) throw error;
-  return data as UserRestroom;
+    const stored = localStorage.getItem("user_restrooms");
+    const list: UserRestroom[] = stored ? JSON.parse(stored) : [];
+    list.unshift(newRestroom);
+    localStorage.setItem("user_restrooms", JSON.stringify(list));
+
+    return newRestroom;
+  }
 }
 
 // === DB: 리뷰 ===
@@ -194,4 +217,44 @@ export function searchPublicRestrooms(
   }
 
   return results;
+}
+
+// === 수정 요청 ===
+
+/**
+ * 공공데이터 화장실 정보 수정 요청
+ */
+export async function createEditRequest(req: {
+  restroom_id: string;
+  submitted_by: string;
+  field: string;
+  current_value: string;
+  suggested_value: string;
+  reason: string;
+}): Promise<EditRequest> {
+  try {
+    const { data, error } = await supabase
+      .from("edit_requests")
+      .insert({ ...req, status: "pending" })
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data as EditRequest;
+  } catch {
+    // localStorage fallback
+    const newReq: EditRequest = {
+      id: `local-${Date.now()}`,
+      ...req,
+      status: "pending",
+      created_at: new Date().toISOString(),
+    };
+
+    const stored = localStorage.getItem("edit_requests");
+    const list: EditRequest[] = stored ? JSON.parse(stored) : [];
+    list.unshift(newReq);
+    localStorage.setItem("edit_requests", JSON.stringify(list));
+
+    return newReq;
+  }
 }
