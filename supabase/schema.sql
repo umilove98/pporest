@@ -4,6 +4,24 @@
 -- 공공 화장실 데이터는 정적 JSON으로 서빙 (public/data/public-restrooms.json)
 -- DB에는 유저 활동 데이터만 저장합니다.
 
+-- 0. 관리자 테이블
+create table if not exists admin_users (
+  user_id uuid primary key references auth.users(id) on delete cascade,
+  created_at timestamptz default now()
+);
+
+-- 관리자 판별 함수
+create or replace function is_admin()
+returns boolean
+language sql
+security definer
+stable
+as $$
+  select exists (
+    select 1 from admin_users where user_id = auth.uid()
+  );
+$$;
+
 -- 1. 유저 등록 화장실 (공공데이터에 없는 화장실)
 create table if not exists user_restrooms (
   id uuid primary key default gen_random_uuid(),
@@ -80,6 +98,8 @@ create index if not exists idx_reviews_restroom_id on reviews(restroom_id);
 create index if not exists idx_reviews_user_id on reviews(user_id);
 create index if not exists idx_user_restrooms_location on user_restrooms(lat, lng);
 create index if not exists idx_user_restrooms_status on user_restrooms(status);
+create index if not exists idx_edit_requests_restroom on edit_requests(restroom_id);
+create index if not exists idx_edit_requests_status on edit_requests(status);
 
 -- 4. 리뷰 집계 뷰 (restroom_id별 평균 평점/리뷰 수)
 create or replace view review_stats as
@@ -93,14 +113,24 @@ group by restroom_id;
 -- 5. RLS (Row Level Security) 정책
 alter table user_restrooms enable row level security;
 alter table reviews enable row level security;
+alter table safety_checks enable row level security;
+alter table edit_requests enable row level security;
 
--- 승인된 화장실 또는 본인 등록 화장실 조회 가능
+-- user_restrooms: 승인된 화장실 + 본인 등록 + 관리자 전체 조회
 create policy "user_restrooms_select" on user_restrooms
-  for select using (status = 'approved' or submitted_by = auth.uid());
+  for select using (status = 'approved' or submitted_by = auth.uid() or is_admin());
 
 -- 로그인한 사용자만 화장실 등록 가능
 create policy "user_restrooms_insert" on user_restrooms
   for insert with check (auth.uid() = submitted_by and status = 'pending');
+
+-- 관리자만 상태 변경 가능 (승인)
+create policy "user_restrooms_update_admin" on user_restrooms
+  for update using (is_admin());
+
+-- 관리자만 삭제 가능 (거절)
+create policy "user_restrooms_delete_admin" on user_restrooms
+  for delete using (is_admin());
 
 -- 누구나 리뷰 조회 가능
 create policy "reviews_select" on reviews
@@ -117,8 +147,17 @@ create policy "reviews_update" on reviews
 create policy "reviews_delete" on reviews
   for delete using (auth.uid() = user_id);
 
--- 안전 확인 RLS
-alter table safety_checks enable row level security;
+-- edit_requests: 본인 요청 + 관리자 전체 조회
+create policy "edit_requests_select" on edit_requests
+  for select using (submitted_by = auth.uid() or is_admin());
+
+-- 로그인한 사용자만 수정 요청 가능
+create policy "edit_requests_insert" on edit_requests
+  for insert with check (auth.uid() = submitted_by and status = 'pending');
+
+-- 관리자만 수정 요청 처리 가능
+create policy "edit_requests_update_admin" on edit_requests
+  for update using (is_admin());
 
 -- 누구나 안전 확인 횟수 조회 가능
 create policy "safety_checks_select" on safety_checks

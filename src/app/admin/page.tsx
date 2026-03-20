@@ -14,6 +14,7 @@ import {
   rejectRestroom,
   getPendingEditRequests,
   resolveEditRequest,
+  checkIsAdmin,
 } from "@/lib/api";
 import { UserRestroom, EditRequest } from "@/lib/types";
 
@@ -33,6 +34,12 @@ export default function AdminPage() {
   useEffect(() => {
     async function load() {
       try {
+        const admin = await checkIsAdmin();
+        if (!admin) {
+          setError("관리자 권한이 없습니다.");
+          setLoading(false);
+          return;
+        }
         const [restrooms, edits] = await Promise.all([
           getPendingRestrooms(),
           getPendingEditRequests(),

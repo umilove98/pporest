@@ -10,13 +10,14 @@ import { StarRating } from "@/components/restroom/star-rating";
 import { LoginForm } from "@/components/auth/login-form";
 import { useAuth } from "@/components/auth/auth-provider";
 import { signOut } from "@/lib/auth";
-import { getReviewsByUserId } from "@/lib/api";
+import { getReviewsByUserId, checkIsAdmin } from "@/lib/api";
 import { Review } from "@/lib/types";
 
 export default function ProfilePage() {
   const { user, loading } = useAuth();
   const [reviews, setReviews] = useState<Review[]>([]);
   const [reviewsLoading, setReviewsLoading] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -25,6 +26,7 @@ export default function ProfilePage() {
       .then(setReviews)
       .catch(() => setReviews([]))
       .finally(() => setReviewsLoading(false));
+    checkIsAdmin().then(setIsAdmin).catch(() => setIsAdmin(false));
   }, [user]);
 
   const photoCount = reviews.filter((r) => r.has_photo).length;
@@ -106,12 +108,14 @@ export default function ProfilePage() {
             </div>
 
             <div className="flex w-full flex-col gap-2 pb-4">
-              <Link href="/admin">
-                <Button variant="outline" className="w-full gap-2">
-                  <Shield className="h-4 w-4" />
-                  관리자 페이지
-                </Button>
-              </Link>
+              {isAdmin && (
+                <Link href="/admin">
+                  <Button variant="outline" className="w-full gap-2">
+                    <Shield className="h-4 w-4" />
+                    관리자 페이지
+                  </Button>
+                </Link>
+              )}
               <Button
                 variant="outline"
                 className="w-full gap-2"
