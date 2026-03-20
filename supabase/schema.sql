@@ -1,8 +1,11 @@
 -- PPORest Database Schema
 -- Supabase에서 SQL Editor를 통해 실행하세요.
+--
+-- 공공 화장실 데이터는 정적 JSON으로 서빙 (public/data/public-restrooms.json)
+-- DB에는 유저 활동 데이터만 저장합니다.
 
--- 1. 화장실 테이블
-create table if not exists restrooms (
+-- 1. 유저 등록 화장실 (공공데이터에 없는 화장실)
+create table if not exists user_restrooms (
   id uuid primary key default gen_random_uuid(),
   name text not null,
   address text not null,
@@ -10,27 +13,21 @@ create table if not exists restrooms (
   lng double precision not null,
   tags text[] default '{}',
   is_open boolean default true,
-  -- 데이터 출처: 'public_data' (공공데이터), 'user' (유저 등록)
-  source text not null default 'user' check (source in ('public_data', 'user')),
-  -- 승인 상태: 'approved' (공개), 'pending' (승인 대기)
   status text not null default 'pending' check (status in ('approved', 'pending')),
-  -- 등록자 (유저 등록 시)
-  submitted_by uuid references auth.users(id),
-  -- 상세 시설 정보
+  submitted_by uuid not null references auth.users(id),
   has_disabled_access boolean default false,
   has_diaper_table boolean default false,
   has_bidet boolean default false,
   is_free boolean default true,
-  open_hours text,  -- e.g. '24시간', '06:00-22:00'
-  -- 공공데이터 원본 ID (중복 방지용)
-  public_data_id text unique,
+  open_hours text,
   created_at timestamptz default now()
 );
 
--- 2. 리뷰 테이블
+-- 2. 리뷰 (공공데이터/유저등록 화장실 모두 대상)
+--    restroom_key: 공공데이터는 "pd-1" 형태, 유저등록은 uuid
 create table if not exists reviews (
   id uuid primary key default gen_random_uuid(),
-  restroom_id uuid not null references restrooms(id) on delete cascade,
+  restroom_key text not null,
   user_id uuid not null references auth.users(id) on delete cascade,
   user_name text not null,
   rating smallint not null check (rating >= 1 and rating <= 5),
@@ -41,46 +38,31 @@ create table if not exists reviews (
 );
 
 -- 3. 인덱스
-create index if not exists idx_reviews_restroom_id on reviews(restroom_id);
+create index if not exists idx_reviews_restroom_key on reviews(restroom_key);
 create index if not exists idx_reviews_user_id on reviews(user_id);
-create index if not exists idx_restrooms_location on restrooms(lat, lng);
+create index if not exists idx_user_restrooms_location on user_restrooms(lat, lng);
+create index if not exists idx_user_restrooms_status on user_restrooms(status);
 
--- 4. 화장실 평균 평점/리뷰 수 뷰
-create or replace view restroom_stats as
+-- 4. 리뷰 집계 뷰 (restroom_key별 평균 평점/리뷰 수)
+create or replace view review_stats as
 select
-  r.id,
-  r.name,
-  r.address,
-  r.lat,
-  r.lng,
-  r.tags,
-  r.is_open,
-  r.source,
-  r.status,
-  r.has_disabled_access,
-  r.has_diaper_table,
-  r.has_bidet,
-  r.is_free,
-  r.open_hours,
-  r.created_at,
-  coalesce(round(avg(rv.rating)::numeric, 1), 0) as rating,
-  count(rv.id)::int as review_count
-from restrooms r
-left join reviews rv on rv.restroom_id = r.id
-where r.status = 'approved'
-group by r.id;
+  restroom_key,
+  coalesce(round(avg(rating)::numeric, 1), 0) as rating,
+  count(*)::int as review_count
+from reviews
+group by restroom_key;
 
 -- 5. RLS (Row Level Security) 정책
-alter table restrooms enable row level security;
+alter table user_restrooms enable row level security;
 alter table reviews enable row level security;
 
--- 승인된 화장실만 조회 가능 (또는 본인이 등록한 대기 중 화장실)
-create policy "restrooms_select" on restrooms
+-- 승인된 화장실 또는 본인 등록 화장실 조회 가능
+create policy "user_restrooms_select" on user_restrooms
   for select using (status = 'approved' or submitted_by = auth.uid());
 
--- 로그인한 사용자만 화장실 등록 가능 (pending 상태로)
-create policy "restrooms_insert" on restrooms
-  for insert with check (auth.uid() = submitted_by and status = 'pending' and source = 'user');
+-- 로그인한 사용자만 화장실 등록 가능
+create policy "user_restrooms_insert" on user_restrooms
+  for insert with check (auth.uid() = submitted_by and status = 'pending');
 
 -- 누구나 리뷰 조회 가능
 create policy "reviews_select" on reviews

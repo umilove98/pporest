@@ -10,7 +10,7 @@ import { Separator } from "@/components/ui/separator";
 import { StarRating } from "@/components/restroom/star-rating";
 import { PhotoGrid } from "@/components/restroom/photo-grid";
 import { ReviewCard } from "@/components/restroom/review-card";
-import { getRestroomById, getReviewsByRestroomId } from "@/lib/api";
+import { loadPublicRestrooms, toRestroom, getReviewsByKey } from "@/lib/api";
 import { mockRestrooms, mockReviews } from "@/lib/mock-data";
 import { Restroom, Review } from "@/lib/types";
 
@@ -24,16 +24,27 @@ export default function RestroomDetailPage() {
   useEffect(() => {
     async function fetchData() {
       try {
-        const [r, revs] = await Promise.all([
-          getRestroomById(id),
-          getReviewsByRestroomId(id),
-        ]);
-        setRestroom(r);
-        setReviews(revs);
+        // 정적 데이터에서 화장실 찾기
+        const publicData = await loadPublicRestrooms();
+        const found = publicData.find((p) => p.id === id);
+
+        if (found) {
+          setRestroom(toRestroom(found));
+        } else {
+          // mock fallback
+          setRestroom(mockRestrooms.find((r) => r.id === id) ?? null);
+        }
+
+        // DB에서 리뷰 조회
+        try {
+          const revs = await getReviewsByKey(id);
+          setReviews(revs);
+        } catch {
+          setReviews(mockReviews.filter((r) => r.restroom_key === id));
+        }
       } catch {
-        // Supabase 미연결 시 mock 데이터 사용
         setRestroom(mockRestrooms.find((r) => r.id === id) ?? null);
-        setReviews(mockReviews.filter((r) => r.restroom_id === id));
+        setReviews(mockReviews.filter((r) => r.restroom_key === id));
       } finally {
         setLoading(false);
       }

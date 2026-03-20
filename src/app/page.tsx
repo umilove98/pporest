@@ -6,7 +6,7 @@ import { MapPin, Plus } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { MapView, MapBounds } from "@/components/restroom/map-view";
 import { RestroomCard } from "@/components/restroom/restroom-card";
-import { getRestrooms } from "@/lib/api";
+import { loadPublicRestrooms, toRestroom, getUserRestrooms } from "@/lib/api";
 import { mockRestrooms } from "@/lib/mock-data";
 import { Restroom } from "@/lib/types";
 import { getDistanceMeters, formatDistance } from "@/lib/utils";
@@ -27,7 +27,7 @@ export default function HomePage() {
     if (!navigator.geolocation) return;
     navigator.geolocation.getCurrentPosition(
       (pos) => setLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-      () => {}, // 위치 권한 거부 시 무시
+      () => {},
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
   }, []);
@@ -35,7 +35,6 @@ export default function HomePage() {
   // 역지오코딩: 좌표 → 주소 변환
   useEffect(() => {
     if (!location) return;
-    // 카카오맵 SDK가 로드될 때까지 대기
     const tryGeocode = () => {
       if (!window.kakao?.maps?.services) return false;
       const geocoder = new window.kakao.maps.services.Geocoder();
@@ -48,19 +47,36 @@ export default function HomePage() {
       return true;
     };
     if (tryGeocode()) return;
-    // SDK 아직 안 로드됐으면 폴링
     const interval = setInterval(() => {
       if (tryGeocode()) clearInterval(interval);
     }, 500);
     return () => clearInterval(interval);
   }, [location]);
 
-  // 화장실 목록 로드
+  // 데이터 로드: 정적 JSON + DB 유저 등록 화장실
   useEffect(() => {
-    getRestrooms()
-      .then(setRestrooms)
-      .catch(() => setRestrooms(mockRestrooms))
-      .finally(() => setLoading(false));
+    async function load() {
+      try {
+        const publicData = await loadPublicRestrooms();
+        const publicRestrooms = publicData.map((p) => toRestroom(p));
+
+        // DB에서 유저 등록 화장실도 가져오기 (실패 시 무시)
+        let userRestrooms: Restroom[] = [];
+        try {
+          userRestrooms = await getUserRestrooms();
+        } catch {
+          // Supabase 미연결 시 무시
+        }
+
+        setRestrooms([...publicRestrooms, ...userRestrooms]);
+      } catch {
+        // 정적 JSON 로드 실패 시 mock 사용
+        setRestrooms(mockRestrooms);
+      } finally {
+        setLoading(false);
+      }
+    }
+    load();
   }, []);
 
   // 거리 계산 + 정렬

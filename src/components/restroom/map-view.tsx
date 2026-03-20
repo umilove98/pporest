@@ -172,7 +172,7 @@ export function MapView({ restrooms, userLocation, className = "", onBoundsChang
         openInfoWindow = infoWindow;
       });
     });
-  }, [sdkReady, restrooms, userLocation]);
+  }, [sdkReady, restrooms, userLocation, onBoundsChange]);
 
   // API 키 없으면 placeholder
   if (error) {

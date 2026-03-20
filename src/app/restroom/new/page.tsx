@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/components/auth/auth-provider";
-import { createRestroom } from "@/lib/api";
+import { createUserRestroom } from "@/lib/api";
 
 const FACILITY_OPTIONS = [
   { key: "has_disabled_access", label: "장애인 접근 가능" },
@@ -87,7 +87,7 @@ export default function NewRestroomPage() {
 
     setSubmitting(true);
     try {
-      await createRestroom({
+      await createUserRestroom({
         name: name.trim(),
         address: address.trim(),
         lat,
