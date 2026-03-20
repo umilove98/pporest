@@ -92,18 +92,37 @@ export async function createUserRestroom(restroom: {
   is_free: boolean;
   open_hours: string | null;
 }): Promise<UserRestroom> {
-  const { data, error } = await supabase
-    .from("user_restrooms")
-    .insert({
+  // Supabase 연결 시 DB에 저장
+  try {
+    const { data, error } = await supabase
+      .from("user_restrooms")
+      .insert({
+        ...restroom,
+        status: "pending",
+        is_open: true,
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data as UserRestroom;
+  } catch {
+    // Supabase 미연결 시 localStorage fallback
+    const newRestroom: UserRestroom = {
+      id: `local-${Date.now()}`,
       ...restroom,
       status: "pending",
       is_open: true,
-    })
-    .select()
-    .single();
+      created_at: new Date().toISOString(),
+    };
 
-  if (error) throw error;
-  return data as UserRestroom;
+    const stored = localStorage.getItem("user_restrooms");
+    const list: UserRestroom[] = stored ? JSON.parse(stored) : [];
+    list.unshift(newRestroom);
+    localStorage.setItem("user_restrooms", JSON.stringify(list));
+
+    return newRestroom;
+  }
 }
 
 // === DB: 리뷰 ===
