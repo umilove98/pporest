@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import Script from "next/script";
 import { ArrowLeft, MapPin, CheckCircle, Loader2, Camera, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -52,41 +53,43 @@ export default function NewRestroomPage() {
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [useCurrentLocation, setUseCurrentLocation] = useState(false);
+  const [kakaoReady, setKakaoReady] = useState(false);
+  // 좌표를 먼저 받고, SDK 로드 후 역지오코딩 실행
+  const pendingCoords = useRef<{ lat: number; lng: number } | null>(null);
 
-  // 좌표 → 주소 변환 (Kakao SDK 있으면 사용, 없으면 Nominatim fallback)
-  const reverseGeocode = useCallback(async (latitude: number, longitude: number) => {
-    // 1) Kakao Maps SDK (이미 로드된 경우)
+  const KAKAO_API_KEY = process.env.NEXT_PUBLIC_KAKAO_MAP_API_KEY;
+
+  // 이미 Kakao SDK 로드된 경우 (홈에서 이동 등)
+  useEffect(() => {
     if (window.kakao?.maps?.services) {
-      const geocoder = new window.kakao.maps.services.Geocoder();
-      geocoder.coord2Address(longitude, latitude, (result, status) => {
-        if (status === window.kakao.maps.services.Status.OK && result[0]) {
-          const addr = result[0].road_address?.address_name || result[0].address.address_name;
-          setAddress(addr);
-        }
-      });
-      return;
-    }
-
-    // 2) Nominatim (OpenStreetMap) 무료 역지오코딩
-    try {
-      const res = await fetch(
-        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&accept-language=ko`
-      );
-      if (res.ok) {
-        const data = await res.json();
-        if (data.display_name) {
-          // "대한민국" 접두사 제거, 우편번호 제거
-          const addr = data.display_name
-            .replace(/대한민국,?\s*/g, "")
-            .replace(/\d{5},?\s*/g, "")
-            .trim();
-          setAddress(addr);
-        }
-      }
-    } catch {
-      // 역지오코딩 실패해도 좌표는 이미 설정됨
+      setKakaoReady(true);
     }
   }, []);
+
+  const handleKakaoLoad = useCallback(() => {
+    if (window.kakao?.maps) {
+      window.kakao.maps.load(() => {
+        setKakaoReady(true);
+        // SDK 로드 완료 후, 대기 중이던 좌표가 있으면 역지오코딩 실행
+        if (pendingCoords.current) {
+          const { lat: pLat, lng: pLng } = pendingCoords.current;
+          pendingCoords.current = null;
+          doReverseGeocode(pLat, pLng);
+        }
+      });
+    }
+  }, []);
+
+  const doReverseGeocode = (latitude: number, longitude: number) => {
+    if (!window.kakao?.maps?.services) return;
+    const geocoder = new window.kakao.maps.services.Geocoder();
+    geocoder.coord2Address(longitude, latitude, (result, status) => {
+      if (status === window.kakao.maps.services.Status.OK && result[0]) {
+        const addr = result[0].road_address?.address_name || result[0].address.address_name;
+        setAddress(addr);
+      }
+    });
+  };
 
   // 현재 위치 가져오기
   const handleUseCurrentLocation = useCallback(() => {
@@ -97,13 +100,18 @@ export default function NewRestroomPage() {
         const { latitude, longitude } = pos.coords;
         setLat(latitude);
         setLng(longitude);
-        reverseGeocode(latitude, longitude);
+        if (kakaoReady) {
+          doReverseGeocode(latitude, longitude);
+        } else {
+          // SDK 아직 안 로드됨 → 좌표 저장해두고 로드 완료 시 실행
+          pendingCoords.current = { lat: latitude, lng: longitude };
+        }
         setUseCurrentLocation(false);
       },
       () => setUseCurrentLocation(false),
       { enableHighAccuracy: true, timeout: 10000 }
     );
-  }, [reverseGeocode]);
+  }, [kakaoReady]);
 
   const toggleTag = (tag: string) => {
     setSelectedTags((prev) =>
@@ -222,6 +230,14 @@ export default function NewRestroomPage() {
 
   return (
     <div className="flex flex-col">
+      {/* Kakao SDK 로드 (역지오코딩용 — 이미 로드된 경우 중복 로드 안 함) */}
+      {KAKAO_API_KEY && !kakaoReady && (
+        <Script
+          src={`//dapi.kakao.com/v2/maps/sdk.js?appkey=${KAKAO_API_KEY}&libraries=services&autoload=false`}
+          onLoad={handleKakaoLoad}
+        />
+      )}
+
       <header className="sticky top-0 z-40 flex items-center gap-3 border-b bg-background px-4 py-3">
         <button onClick={() => router.back()}>
           <ArrowLeft className="h-5 w-5" />
