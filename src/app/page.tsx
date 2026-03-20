@@ -1,18 +1,19 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { MapPin, Plus } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
-import { MapView, MapBounds } from "@/components/restroom/map-view";
+import { MapView, MapBounds, MarkerData } from "@/components/restroom/map-view";
 import { RestroomCard } from "@/components/restroom/restroom-card";
-import { loadPublicRestrooms, toRestroom, getUserRestrooms } from "@/lib/api";
-import { mockRestrooms } from "@/lib/mock-data";
-import { Restroom } from "@/lib/types";
+import { loadPublicRestrooms, toRestroom } from "@/lib/api";
+import { PublicRestroom, Restroom } from "@/lib/types";
 import { getDistanceMeters, formatDistance } from "@/lib/utils";
 
+const MAX_LIST_ITEMS = 20;
+
 export default function HomePage() {
-  const [restrooms, setRestrooms] = useState<Restroom[]>(mockRestrooms);
+  const [publicData, setPublicData] = useState<PublicRestroom[]>([]);
   const [loading, setLoading] = useState(true);
   const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [locationReady, setLocationReady] = useState(false);
@@ -60,25 +61,14 @@ export default function HomePage() {
     return () => clearInterval(interval);
   }, [location]);
 
-  // 데이터 로드: 정적 JSON + DB 유저 등록 화장실
+  // 데이터 로드: 정적 JSON만 (원본 유지)
   useEffect(() => {
     async function load() {
       try {
-        const publicData = await loadPublicRestrooms();
-        const publicRestrooms = publicData.map((p) => toRestroom(p));
-
-        // DB에서 유저 등록 화장실도 가져오기 (실패 시 무시)
-        let userRestrooms: Restroom[] = [];
-        try {
-          userRestrooms = await getUserRestrooms();
-        } catch {
-          // Supabase 미연결 시 무시
-        }
-
-        setRestrooms([...publicRestrooms, ...userRestrooms]);
+        const data = await loadPublicRestrooms();
+        setPublicData(data);
       } catch {
-        // 정적 JSON 로드 실패 시 mock 사용
-        setRestrooms(mockRestrooms);
+        // 로드 실패 시 빈 배열
       } finally {
         setLoading(false);
       }
@@ -86,32 +76,43 @@ export default function HomePage() {
     load();
   }, []);
 
-  // 거리 계산 + 정렬
-  const restroomsWithDistance = restrooms.map((r) => ({
-    ...r,
-    distance: location
-      ? formatDistance(getDistanceMeters(location.lat, location.lng, r.lat, r.lng))
-      : r.distance,
-  }));
+  // bounds 내 데이터만 Restroom으로 변환 + 거리 계산 + 정렬 + 제한
+  const visibleRestrooms: Restroom[] = useMemo(() => {
+    if (!mapBounds || publicData.length === 0) return [];
 
-  if (location) {
-    restroomsWithDistance.sort((a, b) => {
-      const distA = getDistanceMeters(location.lat, location.lng, a.lat, a.lng);
-      const distB = getDistanceMeters(location.lat, location.lng, b.lat, b.lng);
-      return distA - distB;
+    // bounds 내 필터링
+    const inBounds = publicData.filter(
+      (r) =>
+        r.lat >= mapBounds.sw.lat &&
+        r.lat <= mapBounds.ne.lat &&
+        r.lng >= mapBounds.sw.lng &&
+        r.lng <= mapBounds.ne.lng
+    );
+
+    // 거리순 정렬 (위치 있을 때)
+    if (location) {
+      inBounds.sort((a, b) => {
+        const distA = getDistanceMeters(location.lat, location.lng, a.lat, a.lng);
+        const distB = getDistanceMeters(location.lat, location.lng, b.lat, b.lng);
+        return distA - distB;
+      });
+    }
+
+    // 제한 + 변환
+    return inBounds.slice(0, MAX_LIST_ITEMS).map((p) => {
+      const restroom = toRestroom(p);
+      if (location) {
+        restroom.distance = formatDistance(
+          getDistanceMeters(location.lat, location.lng, p.lat, p.lng)
+        );
+      }
+      return restroom;
     });
-  }
+  }, [mapBounds, publicData, location]);
 
-  // 지도 bounds 내 화장실만 필터링
-  const visibleRestrooms = mapBounds
-    ? restroomsWithDistance.filter(
-        (r) =>
-          r.lat >= mapBounds.sw.lat &&
-          r.lat <= mapBounds.ne.lat &&
-          r.lng >= mapBounds.sw.lng &&
-          r.lng <= mapBounds.ne.lng
-      )
-    : restroomsWithDistance;
+  // MapView에는 경량 MarkerData만 전달 (변환 없이 원본 그대로)
+  // MapView 내부에서 bounds 필터 + 50개 제한 처리
+  const mapMarkers: MarkerData[] = publicData;
 
   return (
     <div className="flex flex-col">
@@ -127,7 +128,7 @@ export default function HomePage() {
       {/* Map */}
       <div className="px-4 pt-4">
         {locationReady ? (
-          <MapView restrooms={restroomsWithDistance} userLocation={location} onBoundsChange={handleBoundsChange} />
+          <MapView restrooms={mapMarkers} userLocation={location} onBoundsChange={handleBoundsChange} />
         ) : (
           <div className="flex h-[300px] items-center justify-center rounded-xl border bg-muted/30">
             <p className="text-sm text-muted-foreground">위치 확인 중...</p>
@@ -157,6 +158,10 @@ export default function HomePage() {
         {loading ? (
           <div className="flex justify-center py-8">
             <p className="text-sm text-muted-foreground">로딩 중...</p>
+          </div>
+        ) : !mapBounds ? (
+          <div className="flex justify-center py-8">
+            <p className="text-sm text-muted-foreground">지도가 준비되면 주변 화장실이 표시됩니다</p>
           </div>
         ) : visibleRestrooms.length === 0 ? (
           <div className="flex justify-center py-8">
