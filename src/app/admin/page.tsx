@@ -46,8 +46,9 @@ export default function AdminPage() {
         ]);
         setPendingRestrooms(restrooms);
         setPendingEdits(edits);
-      } catch {
-        setError("Supabase 연결이 필요합니다. .env.local에 Supabase 설정을 확인해주세요.");
+      } catch (err) {
+        console.error("[관리자] 데이터 로드 실패:", err);
+        setError("데이터를 불러올 수 없습니다. 잠시 후 다시 시도해주세요.");
       } finally {
         setLoading(false);
       }
