@@ -96,6 +96,37 @@ export async function createReview(review: {
 }
 
 /**
+ * 화장실 등록 (유저 제출 — pending 상태)
+ */
+export async function createRestroom(restroom: {
+  name: string;
+  address: string;
+  lat: number;
+  lng: number;
+  tags: string[];
+  submitted_by: string;
+  has_disabled_access: boolean;
+  has_diaper_table: boolean;
+  has_bidet: boolean;
+  is_free: boolean;
+  open_hours: string | null;
+}): Promise<Restroom> {
+  const { data, error } = await supabase
+    .from("restrooms")
+    .insert({
+      ...restroom,
+      source: "user",
+      status: "pending",
+      is_open: true,
+    })
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data as Restroom;
+}
+
+/**
  * 특정 사용자의 리뷰 목록 조회
  */
 export async function getReviewsByUserId(userId: string): Promise<Review[]> {

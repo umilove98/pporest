@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { ChevronLeft, MapPin, Clock } from "lucide-react";
+import { ChevronLeft, MapPin, Clock, Accessibility, Baby, Droplets, Banknote } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
@@ -90,6 +90,37 @@ export default function RestroomDetailPage() {
             ) : (
               <span className="text-red-500">현재 이용 불가</span>
             )}
+            {restroom.open_hours && (
+              <span className="ml-1">· {restroom.open_hours}</span>
+            )}
+          </div>
+
+          {/* 시설 정보 아이콘 */}
+          <div className="mt-3 flex flex-wrap gap-3">
+            {restroom.has_disabled_access && (
+              <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                <Accessibility className="h-4 w-4 text-blue-500" />
+                <span>장애인</span>
+              </div>
+            )}
+            {restroom.has_diaper_table && (
+              <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                <Baby className="h-4 w-4 text-pink-500" />
+                <span>기저귀대</span>
+              </div>
+            )}
+            {restroom.has_bidet && (
+              <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                <Droplets className="h-4 w-4 text-cyan-500" />
+                <span>비데</span>
+              </div>
+            )}
+            {restroom.is_free && (
+              <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                <Banknote className="h-4 w-4 text-emerald-500" />
+                <span>무료</span>
+              </div>
+            )}
           </div>
 
           <div className="mt-3 flex flex-wrap gap-1.5">
@@ -98,6 +129,11 @@ export default function RestroomDetailPage() {
                 {tag}
               </Badge>
             ))}
+            {restroom.source === "user" && (
+              <Badge variant="outline" className="text-xs border-emerald-500 text-emerald-600">
+                유저 등록
+              </Badge>
+            )}
           </div>
         </div>
 

@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { MapPin } from "lucide-react";
+import Link from "next/link";
+import { MapPin, Plus } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { MapView } from "@/components/restroom/map-view";
 import { RestroomCard } from "@/components/restroom/restroom-card";
@@ -97,7 +98,16 @@ export default function HomePage() {
       <div className="px-4">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-sm font-semibold">주변 화장실</h2>
-          <span className="text-xs text-muted-foreground">{restroomsWithDistance.length}개</span>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">{restroomsWithDistance.length}개</span>
+            <Link
+              href="/restroom/new"
+              className="flex items-center gap-1 rounded-full bg-emerald-500 px-2.5 py-1 text-xs font-medium text-white hover:bg-emerald-600"
+            >
+              <Plus className="h-3 w-3" />
+              등록
+            </Link>
+          </div>
         </div>
         {loading ? (
           <div className="flex justify-center py-8">

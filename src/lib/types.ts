@@ -6,6 +6,13 @@ export interface Restroom {
   lng: number;
   tags: string[];
   is_open: boolean;
+  source: "public_data" | "user";
+  status: "approved" | "pending";
+  has_disabled_access: boolean;
+  has_diaper_table: boolean;
+  has_bidet: boolean;
+  is_free: boolean;
+  open_hours: string | null;
   created_at: string;
   // 집계 필드 (restroom_stats 뷰에서 조회)
   rating: number;
