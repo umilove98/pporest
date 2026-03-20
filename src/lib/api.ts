@@ -102,37 +102,18 @@ export async function createUserRestroom(restroom: {
   female_stalls: number | null;
   photo_urls: string[];
 }): Promise<UserRestroom> {
-  // Supabase 연결 시 DB에 저장
-  try {
-    const { data, error } = await supabase
-      .from("user_restrooms")
-      .insert({
-        ...restroom,
-        status: "pending",
-        is_open: true,
-      })
-      .select()
-      .single();
-
-    if (error) throw error;
-    return data as UserRestroom;
-  } catch {
-    // Supabase 미연결 시 localStorage fallback
-    const newRestroom: UserRestroom = {
-      id: `local-${Date.now()}`,
+  const { data, error } = await supabase
+    .from("user_restrooms")
+    .insert({
       ...restroom,
       status: "pending",
       is_open: true,
-      created_at: new Date().toISOString(),
-    };
+    })
+    .select()
+    .single();
 
-    const stored = localStorage.getItem("user_restrooms");
-    const list: UserRestroom[] = stored ? JSON.parse(stored) : [];
-    list.unshift(newRestroom);
-    localStorage.setItem("user_restrooms", JSON.stringify(list));
-
-    return newRestroom;
-  }
+  if (error) throw error;
+  return data as UserRestroom;
 }
 
 // === DB: 리뷰 ===
@@ -238,31 +219,77 @@ export async function createEditRequest(req: {
   suggested_value: string;
   reason: string;
 }): Promise<EditRequest> {
-  try {
-    const { data, error } = await supabase
-      .from("edit_requests")
-      .insert({ ...req, status: "pending" })
-      .select()
-      .single();
+  const { data, error } = await supabase
+    .from("edit_requests")
+    .insert({ ...req, status: "pending" })
+    .select()
+    .single();
 
-    if (error) throw error;
-    return data as EditRequest;
-  } catch {
-    // localStorage fallback
-    const newReq: EditRequest = {
-      id: `local-${Date.now()}`,
-      ...req,
-      status: "pending",
-      created_at: new Date().toISOString(),
-    };
+  if (error) throw error;
+  return data as EditRequest;
+}
 
-    const stored = localStorage.getItem("edit_requests");
-    const list: EditRequest[] = stored ? JSON.parse(stored) : [];
-    list.unshift(newReq);
-    localStorage.setItem("edit_requests", JSON.stringify(list));
+// === 관리자 기능 ===
 
-    return newReq;
-  }
+/**
+ * 대기 중인 유저 등록 화장실 목록
+ */
+export async function getPendingRestrooms(): Promise<UserRestroom[]> {
+  const { data, error } = await supabase
+    .from("user_restrooms")
+    .select("*")
+    .eq("status", "pending")
+    .order("created_at", { ascending: false });
+
+  if (error) throw error;
+  return (data ?? []) as UserRestroom[];
+}
+
+/**
+ * 화장실 등록 승인
+ */
+export async function approveRestroom(id: string): Promise<void> {
+  const { error } = await supabase
+    .from("user_restrooms")
+    .update({ status: "approved" })
+    .eq("id", id);
+  if (error) throw error;
+}
+
+/**
+ * 화장실 등록 거절 (삭제)
+ */
+export async function rejectRestroom(id: string): Promise<void> {
+  const { error } = await supabase
+    .from("user_restrooms")
+    .delete()
+    .eq("id", id);
+  if (error) throw error;
+}
+
+/**
+ * 대기 중인 수정 요청 목록
+ */
+export async function getPendingEditRequests(): Promise<EditRequest[]> {
+  const { data, error } = await supabase
+    .from("edit_requests")
+    .select("*")
+    .eq("status", "pending")
+    .order("created_at", { ascending: false });
+
+  if (error) throw error;
+  return (data ?? []) as EditRequest[];
+}
+
+/**
+ * 수정 요청 처리 (승인/거절)
+ */
+export async function resolveEditRequest(id: string, status: "approved" | "rejected"): Promise<void> {
+  const { error } = await supabase
+    .from("edit_requests")
+    .update({ status })
+    .eq("id", id);
+  if (error) throw error;
 }
 
 // === 안전 확인 (오늘도 안전해요!) ===
