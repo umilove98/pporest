@@ -88,6 +88,7 @@ export function MapView({ restrooms, userLocation, className = "", onBoundsChang
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<KakaoMap | null>(null);
   const markersRef = useRef<KakaoMarker[]>([]);
+  const userMarkerRef = useRef<KakaoMarker | null>(null);
   const onBoundsChangeRef = useRef(onBoundsChange);
   const restroomsRef = useRef(restrooms);
   const initializedRef = useRef(false);
@@ -190,28 +191,60 @@ export function MapView({ restrooms, userLocation, className = "", onBoundsChang
 
     const map = new kakao.maps.Map(mapRef.current, {
       center,
-      level: 5,
+      level: 4,
     });
     mapInstanceRef.current = map;
     initializedRef.current = true;
 
     setTimeout(() => map.relayout(), 100);
 
+    // 내 위치 마커
+    if (userLocation) {
+      const userSvg = encodeURIComponent(
+        `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20"><circle cx="10" cy="10" r="8" fill="#3b82f6" stroke="white" stroke-width="3"/></svg>`
+      );
+      const userImage = new kakao.maps.MarkerImage(
+        `data:image/svg+xml,${userSvg}`,
+        new kakao.maps.Size(20, 20),
+        { offset: new kakao.maps.Point(10, 10) }
+      );
+      const userMarker = new kakao.maps.Marker({
+        position: new kakao.maps.LatLng(userLocation.lat, userLocation.lng),
+        map,
+        image: userImage,
+      });
+      userMarkerRef.current = userMarker;
+    }
+
     // idle 이벤트 (디바운스)
     kakao.maps.event.addListener(map, "idle", handleIdle);
 
-    // 초기 bounds + 마커
+    // 초기 bounds
     setTimeout(() => {
       handleIdle();
     }, 200);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sdkReady]);
 
-  // 유저 위치 변경 시 지도 중심 이동
+  // 유저 위치 변경 시 지도 중심 이동 + 마커 업데이트
   useEffect(() => {
-    if (!mapInstanceRef.current || !userLocation) return;
+    const map = mapInstanceRef.current;
+    if (!map || !userLocation) return;
     const { kakao } = window;
-    mapInstanceRef.current.setCenter(new kakao.maps.LatLng(userLocation.lat, userLocation.lng));
+    const pos = new kakao.maps.LatLng(userLocation.lat, userLocation.lng);
+    map.setCenter(pos);
+
+    // 기존 유저 마커 제거 후 재생성
+    if (userMarkerRef.current) userMarkerRef.current.setMap(null);
+    const userSvg = encodeURIComponent(
+      `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20"><circle cx="10" cy="10" r="8" fill="#3b82f6" stroke="white" stroke-width="3"/></svg>`
+    );
+    const userImage = new kakao.maps.MarkerImage(
+      `data:image/svg+xml,${userSvg}`,
+      new kakao.maps.Size(20, 20),
+      { offset: new kakao.maps.Point(10, 10) }
+    );
+    userMarkerRef.current = new kakao.maps.Marker({ position: pos, map, image: userImage });
   }, [userLocation]);
 
   // 데이터 변경 시 마커 업데이트 (지도 이미 있을 때만)
