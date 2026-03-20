@@ -12,7 +12,10 @@ declare global {
         load: (callback: () => void) => void;
         Map: new (container: HTMLElement, options: { center: unknown; level: number }) => KakaoMap;
         LatLng: new (lat: number, lng: number) => unknown;
-        Marker: new (options: { position: unknown; map: KakaoMap }) => KakaoMarker;
+        Marker: new (options: { position: unknown; map: KakaoMap; image?: unknown }) => KakaoMarker;
+        MarkerImage: new (src: string, size: unknown, options?: { offset: unknown }) => unknown;
+        Size: new (width: number, height: number) => unknown;
+        Point: new (x: number, y: number) => unknown;
         InfoWindow: new (options: { content: string }) => KakaoInfoWindow;
         event: {
           addListener: (target: unknown, type: string, handler: () => void) => void;
@@ -90,9 +93,19 @@ export function MapView({ restrooms, userLocation, className = "" }: MapViewProp
 
     let openInfoWindow: KakaoInfoWindow | null = null;
 
+    // 녹색 커스텀 마커
+    const markerSvg = encodeURIComponent(
+      `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="40" viewBox="0 0 28 40"><path d="M14 0C6.27 0 0 6.27 0 14c0 10.5 14 26 14 26s14-15.5 14-26C28 6.27 21.73 0 14 0z" fill="#10b981"/><circle cx="14" cy="14" r="6" fill="white"/></svg>`
+    );
+    const markerImage = new kakao.maps.MarkerImage(
+      `data:image/svg+xml,${markerSvg}`,
+      new kakao.maps.Size(28, 40),
+      { offset: new kakao.maps.Point(14, 40) }
+    );
+
     restrooms.forEach((r) => {
       const position = new kakao.maps.LatLng(r.lat, r.lng);
-      const marker = new kakao.maps.Marker({ position, map });
+      const marker = new kakao.maps.Marker({ position, map, image: markerImage });
 
       const infoWindow = new kakao.maps.InfoWindow({
         content: `<div style="padding:4px 8px;font-size:12px;white-space:nowrap;">${r.name}</div>`,
