@@ -5,7 +5,7 @@ import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { RestroomCard } from "@/components/restroom/restroom-card";
-import { searchPublicRestroomsDB, toRestroom } from "@/lib/api";
+import { searchPublicRestroomsDB, searchUserRestroomsDB, toRestroom, userRestroomToRestroom } from "@/lib/api";
 import { Restroom } from "@/lib/types";
 
 const filters = ["장애인 접근 가능", "기저귀 교환대", "24시간"];
@@ -25,8 +25,14 @@ export default function SearchPage() {
   const doSearch = useCallback(async () => {
     setLoading(true);
     try {
-      const results = await searchPublicRestroomsDB(query, activeFilters);
-      setRestrooms(results.map((p) => toRestroom(p)));
+      const [publicResults, userResults] = await Promise.all([
+        searchPublicRestroomsDB(query, activeFilters),
+        searchUserRestroomsDB(query, activeFilters),
+      ]);
+      setRestrooms([
+        ...publicResults.map((p) => toRestroom(p)),
+        ...userResults.map((u) => userRestroomToRestroom(u)),
+      ]);
     } catch {
       setRestrooms([]);
     } finally {
