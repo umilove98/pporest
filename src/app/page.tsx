@@ -109,7 +109,8 @@ export default function HomePage() {
             return restroom;
           })
         );
-      } catch {
+      } catch (err) {
+        console.error("[홈] 화장실 데이터 조회 실패:", err);
         setFilteredMarkers([]);
         setVisibleRestrooms([]);
       } finally {
