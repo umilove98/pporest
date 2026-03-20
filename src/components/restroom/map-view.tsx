@@ -38,12 +38,13 @@ interface KakaoInfoWindow {
 
 interface MapViewProps {
   restrooms: Restroom[];
+  userLocation?: { lat: number; lng: number } | null;
   className?: string;
 }
 
 const KAKAO_API_KEY = process.env.NEXT_PUBLIC_KAKAO_MAP_API_KEY;
 
-export function MapView({ restrooms, className = "" }: MapViewProps) {
+export function MapView({ restrooms, userLocation, className = "" }: MapViewProps) {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<KakaoMap | null>(null);
   const [sdkReady, setSdkReady] = useState(false);
@@ -72,8 +73,11 @@ export function MapView({ restrooms, className = "" }: MapViewProps) {
     if (!sdkReady || !mapRef.current || restrooms.length === 0) return;
 
     const { kakao } = window;
-    const centerRestroom = restrooms[0];
-    const center = new kakao.maps.LatLng(centerRestroom.lat, centerRestroom.lng);
+
+    // 사용자 위치가 있으면 사용자 위치를, 없으면 첫 번째 화장실을 중심으로
+    const centerLat = userLocation?.lat ?? restrooms[0].lat;
+    const centerLng = userLocation?.lng ?? restrooms[0].lng;
+    const center = new kakao.maps.LatLng(centerLat, centerLng);
 
     const map = new kakao.maps.Map(mapRef.current, {
       center,
@@ -100,7 +104,7 @@ export function MapView({ restrooms, className = "" }: MapViewProps) {
         openInfoWindow = infoWindow;
       });
     });
-  }, [sdkReady, restrooms]);
+  }, [sdkReady, restrooms, userLocation]);
 
   // API 키 없으면 placeholder
   if (error) {

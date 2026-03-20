@@ -20,7 +20,8 @@ export default function HomePage() {
     if (!navigator.geolocation) return;
     navigator.geolocation.getCurrentPosition(
       (pos) => setLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-      () => {} // 위치 권한 거부 시 무시
+      () => {}, // 위치 권한 거부 시 무시
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
   }, []);
 
@@ -61,7 +62,7 @@ export default function HomePage() {
 
       {/* Map */}
       <div className="px-4 pt-4">
-        <MapView restrooms={restroomsWithDistance} />
+        <MapView restrooms={restroomsWithDistance} userLocation={location} />
       </div>
 
       <div className="px-4 py-3">
