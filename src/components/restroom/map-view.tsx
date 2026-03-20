@@ -68,6 +68,10 @@ interface KakaoGeocoder {
     lat: number,
     callback: (result: Array<{ address: { address_name: string }; road_address: { address_name: string } | null }>, status: string) => void
   ) => void;
+  addressSearch: (
+    addr: string,
+    callback: (result: Array<{ address_name: string; road_address_name?: string; x: string; y: string }>, status: string) => void
+  ) => void;
 }
 
 export interface MapBounds {
