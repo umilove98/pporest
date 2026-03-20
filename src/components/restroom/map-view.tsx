@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
+import Script from "next/script";
 import { MapPin } from "lucide-react";
 import { Restroom } from "@/lib/types";
 
@@ -23,6 +24,7 @@ declare global {
 
 interface KakaoMap {
   setCenter: (latlng: unknown) => void;
+  relayout: () => void;
 }
 
 interface KakaoMarker {
@@ -39,37 +41,35 @@ interface MapViewProps {
   className?: string;
 }
 
+const KAKAO_API_KEY = process.env.NEXT_PUBLIC_KAKAO_MAP_API_KEY;
+
 export function MapView({ restrooms, className = "" }: MapViewProps) {
   const mapRef = useRef<HTMLDivElement>(null);
-  const [mapLoaded, setMapLoaded] = useState(false);
-  const [error, setError] = useState(false);
+  const mapInstanceRef = useRef<KakaoMap | null>(null);
+  const [sdkReady, setSdkReady] = useState(false);
+  const [error, setError] = useState(!KAKAO_API_KEY);
 
-  // 카카오맵 SDK 스크립트 로드
+  // SDK가 이미 로드된 경우 체크 (Map 생성자 존재 여부로 판단)
   useEffect(() => {
-    const apiKey = process.env.NEXT_PUBLIC_KAKAO_MAP_API_KEY;
-    if (!apiKey) {
-      setError(true);
-      return;
+    if (typeof window !== "undefined" && window.kakao?.maps?.Map) {
+      setSdkReady(true);
     }
+  }, []);
 
-    if (window.kakao?.maps) {
-      setMapLoaded(true);
-      return;
+  // Script onLoad 핸들러
+  const handleScriptLoad = useCallback(() => {
+    if (window.kakao?.maps?.Map) {
+      // 이미 load() 호출 완료된 경우
+      setSdkReady(true);
+    } else {
+      // autoload=false이므로 load() 호출 필요
+      window.kakao.maps.load(() => setSdkReady(true));
     }
-
-    const script = document.createElement("script");
-    script.src = `https://dapi.kakao.com/v2/maps/sdk.js?appkey=${apiKey}&autoload=false`;
-    script.async = true;
-    script.onload = () => {
-      window.kakao.maps.load(() => setMapLoaded(true));
-    };
-    script.onerror = () => setError(true);
-    document.head.appendChild(script);
   }, []);
 
   // 지도 초기화 + 마커
   useEffect(() => {
-    if (!mapLoaded || !mapRef.current || restrooms.length === 0) return;
+    if (!sdkReady || !mapRef.current || restrooms.length === 0) return;
 
     const { kakao } = window;
     const centerRestroom = restrooms[0];
@@ -79,6 +79,10 @@ export function MapView({ restrooms, className = "" }: MapViewProps) {
       center,
       level: 5,
     });
+    mapInstanceRef.current = map;
+
+    // 컨테이너 크기 변경 대응
+    setTimeout(() => map.relayout(), 100);
 
     let openInfoWindow: KakaoInfoWindow | null = null;
 
@@ -96,9 +100,9 @@ export function MapView({ restrooms, className = "" }: MapViewProps) {
         openInfoWindow = infoWindow;
       });
     });
-  }, [mapLoaded, restrooms]);
+  }, [sdkReady, restrooms]);
 
-  // API 키 없거나 로드 실패 시 placeholder
+  // API 키 없으면 placeholder
   if (error) {
     return (
       <div className={`relative flex h-48 items-center justify-center rounded-lg bg-muted ${className}`}>
@@ -111,13 +115,22 @@ export function MapView({ restrooms, className = "" }: MapViewProps) {
   }
 
   return (
-    <div className={`relative h-48 rounded-lg overflow-hidden bg-muted ${className}`}>
-      {!mapLoaded && (
-        <div className="absolute inset-0 flex items-center justify-center">
-          <p className="text-sm text-muted-foreground">지도 로딩 중...</p>
-        </div>
-      )}
-      <div ref={mapRef} className="h-full w-full" />
-    </div>
+    <>
+      {/* next/script로 카카오맵 SDK 로드 — 중복 방지 내장 */}
+      <Script
+        src={`https://dapi.kakao.com/v2/maps/sdk.js?appkey=${KAKAO_API_KEY}&autoload=false`}
+        strategy="afterInteractive"
+        onLoad={handleScriptLoad}
+        onError={() => setError(true)}
+      />
+      <div className={`relative h-48 rounded-lg overflow-hidden bg-muted ${className}`}>
+        {!sdkReady && (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <p className="text-sm text-muted-foreground">지도 로딩 중...</p>
+          </div>
+        )}
+        <div ref={mapRef} className="h-full w-full" />
+      </div>
+    </>
   );
 }
