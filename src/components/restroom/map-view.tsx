@@ -83,7 +83,6 @@ interface MapViewProps {
 }
 
 const KAKAO_API_KEY = process.env.NEXT_PUBLIC_KAKAO_MAP_API_KEY;
-const MAX_MARKERS = 50;
 
 export function MapView({ restrooms, userLocation, className = "", onBoundsChange }: MapViewProps) {
   const mapRef = useRef<HTMLDivElement>(null);
@@ -118,28 +117,21 @@ export function MapView({ restrooms, userLocation, className = "", onBoundsChang
     }
   }, []);
 
-  // bounds 내 마커만 업데이트 (최대 MAX_MARKERS개)
+  // 전달받은 마커 데이터로 마커 업데이트 (이미 필터됨)
   const updateMarkers = useCallback(() => {
     const map = mapInstanceRef.current;
     if (!map) return;
 
     const { kakao } = window;
-    const bounds = map.getBounds();
-    const sw = bounds.getSouthWest();
-    const ne = bounds.getNorthEast();
-    const swLat = sw.getLat(), swLng = sw.getLng();
-    const neLat = ne.getLat(), neLng = ne.getLng();
-
-    // bounds 내 화장실만 필터 + 제한
-    const visible = restroomsRef.current.filter(
-      (r) => r.lat >= swLat && r.lat <= neLat && r.lng >= swLng && r.lng <= neLng
-    ).slice(0, MAX_MARKERS);
 
     // 기존 마커 제거
     markersRef.current.forEach((m) => m.setMap(null));
     markersRef.current = [];
 
-    // 마커 이미지 (한 번만 생성)
+    const items = restroomsRef.current;
+    if (items.length === 0) return;
+
+    // 마커 이미지
     const markerSvg = encodeURIComponent(
       `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="40" viewBox="0 0 28 40"><path d="M14 0C6.27 0 0 6.27 0 14c0 10.5 14 26 14 26s14-15.5 14-26C28 6.27 21.73 0 14 0z" fill="#10b981"/><circle cx="14" cy="14" r="6" fill="white"/></svg>`
     );
@@ -151,7 +143,7 @@ export function MapView({ restrooms, userLocation, className = "", onBoundsChang
 
     let openInfoWindow: KakaoInfoWindow | null = null;
 
-    visible.forEach((r) => {
+    items.forEach((r) => {
       const position = new kakao.maps.LatLng(r.lat, r.lng);
       const marker = new kakao.maps.Marker({ position, map, image: markerImage });
       markersRef.current.push(marker);
@@ -168,7 +160,7 @@ export function MapView({ restrooms, userLocation, className = "", onBoundsChang
     });
   }, []);
 
-  // 디바운스된 idle 핸들러
+  // 디바운스된 idle 핸들러 — bounds만 전달 (마커는 prop 변경 시 업데이트)
   const handleIdle = useCallback(() => {
     if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
     debounceTimerRef.current = setTimeout(() => {
@@ -179,16 +171,12 @@ export function MapView({ restrooms, userLocation, className = "", onBoundsChang
       const sw = bounds.getSouthWest();
       const ne = bounds.getNorthEast();
 
-      // bounds 콜백 전달 (리스트 필터링용)
       onBoundsChangeRef.current?.({
         sw: { lat: sw.getLat(), lng: sw.getLng() },
         ne: { lat: ne.getLat(), lng: ne.getLng() },
       });
-
-      // 마커 업데이트
-      updateMarkers();
     }, 300);
-  }, [updateMarkers]);
+  }, []);
 
   // 지도 초기화 (한 번만)
   useEffect(() => {

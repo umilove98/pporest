@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import Link from "next/link";
 import { MapPin, Plus } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
@@ -11,20 +11,23 @@ import { PublicRestroom, Restroom } from "@/lib/types";
 import { getDistanceMeters, formatDistance } from "@/lib/utils";
 
 const MAX_LIST_ITEMS = 20;
+const MAX_MARKERS = 50;
 
 export default function HomePage() {
-  const [publicData, setPublicData] = useState<PublicRestroom[]>([]);
-  const [loading, setLoading] = useState(true);
   const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [locationReady, setLocationReady] = useState(false);
   const [currentAddress, setCurrentAddress] = useState<string | null>(null);
   const [mapBounds, setMapBounds] = useState<MapBounds | null>(null);
+  const [filteredMarkers, setFilteredMarkers] = useState<MarkerData[]>([]);
+  const [visibleRestrooms, setVisibleRestrooms] = useState<Restroom[]>([]);
+  const [dataReady, setDataReady] = useState(false);
+  const publicDataRef = useRef<PublicRestroom[]>([]);
 
   const handleBoundsChange = useCallback((bounds: MapBounds) => {
     setMapBounds(bounds);
   }, []);
 
-  // 현재 위치 가져오기
+  // 1. 현재 위치 가져오기
   useEffect(() => {
     if (!navigator.geolocation) {
       setLocationReady(true);
@@ -40,7 +43,7 @@ export default function HomePage() {
     );
   }, []);
 
-  // 역지오코딩: 좌표 → 주소 (Kakao Maps services)
+  // 역지오코딩
   useEffect(() => {
     if (!location) return;
     const tryGeocode = () => {
@@ -61,32 +64,31 @@ export default function HomePage() {
     return () => clearInterval(interval);
   }, [location]);
 
-  // 데이터 로드: 정적 JSON만 (원본 유지)
+  // 2. 지도 bounds가 정해지면 데이터 로드 (최초 1회만)
   useEffect(() => {
+    if (!mapBounds || dataReady) return;
     async function load() {
       try {
         const data = await loadPublicRestrooms();
-        setPublicData(data);
+        publicDataRef.current = data;
+        setDataReady(true);
       } catch {
-        // 로드 실패 시 빈 배열
-      } finally {
-        setLoading(false);
+        setDataReady(true);
       }
     }
     load();
-  }, []);
+  }, [mapBounds, dataReady]);
 
-  // bounds 내 데이터만 Restroom으로 변환 + 거리 계산 + 정렬 + 제한
-  const visibleRestrooms: Restroom[] = useMemo(() => {
-    if (!mapBounds || publicData.length === 0) return [];
+  // 3. bounds 변경 또는 데이터 로드 완료 시 → 범위 내 필터링
+  useEffect(() => {
+    if (!mapBounds || !dataReady) return;
+
+    const data = publicDataRef.current;
+    const { sw, ne } = mapBounds;
 
     // bounds 내 필터링
-    const inBounds = publicData.filter(
-      (r) =>
-        r.lat >= mapBounds.sw.lat &&
-        r.lat <= mapBounds.ne.lat &&
-        r.lng >= mapBounds.sw.lng &&
-        r.lng <= mapBounds.ne.lng
+    const inBounds = data.filter(
+      (r) => r.lat >= sw.lat && r.lat <= ne.lat && r.lng >= sw.lng && r.lng <= ne.lng
     );
 
     // 거리순 정렬 (위치 있을 때)
@@ -98,21 +100,29 @@ export default function HomePage() {
       });
     }
 
-    // 제한 + 변환
-    return inBounds.slice(0, MAX_LIST_ITEMS).map((p) => {
-      const restroom = toRestroom(p);
-      if (location) {
-        restroom.distance = formatDistance(
-          getDistanceMeters(location.lat, location.lng, p.lat, p.lng)
-        );
-      }
-      return restroom;
-    });
-  }, [mapBounds, publicData, location]);
+    // 마커용 (최대 50개, 경량)
+    setFilteredMarkers(
+      inBounds.slice(0, MAX_MARKERS).map((r) => ({
+        id: r.id,
+        name: r.name,
+        lat: r.lat,
+        lng: r.lng,
+      }))
+    );
 
-  // MapView에는 경량 MarkerData만 전달 (변환 없이 원본 그대로)
-  // MapView 내부에서 bounds 필터 + 50개 제한 처리
-  const mapMarkers: MarkerData[] = publicData;
+    // 리스트용 (최대 20개, 풀 변환)
+    setVisibleRestrooms(
+      inBounds.slice(0, MAX_LIST_ITEMS).map((p) => {
+        const restroom = toRestroom(p);
+        if (location) {
+          restroom.distance = formatDistance(
+            getDistanceMeters(location.lat, location.lng, p.lat, p.lng)
+          );
+        }
+        return restroom;
+      })
+    );
+  }, [mapBounds, dataReady, location]);
 
   return (
     <div className="flex flex-col">
@@ -125,10 +135,10 @@ export default function HomePage() {
         </div>
       </header>
 
-      {/* Map */}
+      {/* Map — 항상 먼저 렌더, 데이터는 나중에 전달 */}
       <div className="px-4 pt-4">
         {locationReady ? (
-          <MapView restrooms={mapMarkers} userLocation={location} onBoundsChange={handleBoundsChange} />
+          <MapView restrooms={filteredMarkers} userLocation={location} onBoundsChange={handleBoundsChange} />
         ) : (
           <div className="flex h-[300px] items-center justify-center rounded-xl border bg-muted/30">
             <p className="text-sm text-muted-foreground">위치 확인 중...</p>
@@ -155,13 +165,13 @@ export default function HomePage() {
             </Link>
           </div>
         </div>
-        {loading ? (
-          <div className="flex justify-center py-8">
-            <p className="text-sm text-muted-foreground">로딩 중...</p>
-          </div>
-        ) : !mapBounds ? (
+        {!mapBounds ? (
           <div className="flex justify-center py-8">
             <p className="text-sm text-muted-foreground">지도가 준비되면 주변 화장실이 표시됩니다</p>
+          </div>
+        ) : !dataReady ? (
+          <div className="flex justify-center py-8">
+            <p className="text-sm text-muted-foreground">데이터 로딩 중...</p>
           </div>
         ) : visibleRestrooms.length === 0 ? (
           <div className="flex justify-center py-8">
