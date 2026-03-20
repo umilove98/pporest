@@ -174,6 +174,21 @@ export default function AdminPage() {
                         </div>
                       )}
 
+                      {r.photo_urls.length > 0 && (
+                        <div className="flex gap-1.5 overflow-x-auto">
+                          {r.photo_urls.map((url, i) => (
+                            <a key={i} href={url} target="_blank" rel="noopener noreferrer">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={url}
+                                alt={`사진 ${i + 1}`}
+                                className="h-20 w-20 rounded-lg border object-cover"
+                              />
+                            </a>
+                          ))}
+                        </div>
+                      )}
+
                       <div className="text-[10px] text-muted-foreground">
                         {new Date(r.created_at).toLocaleDateString("ko-KR")} · {r.lat.toFixed(4)}, {r.lng.toFixed(4)}
                       </div>

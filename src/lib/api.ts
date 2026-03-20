@@ -106,6 +106,28 @@ export function toRestroom(
   };
 }
 
+// === 사진 업로드 (Supabase Storage) ===
+
+/**
+ * 사진 파일을 Storage에 업로드하고 공개 URL 반환
+ */
+export async function uploadPhoto(file: File, folder: string): Promise<string> {
+  const ext = file.name.split(".").pop() || "jpg";
+  const fileName = `${folder}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+
+  const { error } = await supabase.storage
+    .from("restroom-photos")
+    .upload(fileName, file, { contentType: file.type });
+
+  if (error) throw error;
+
+  const { data } = supabase.storage
+    .from("restroom-photos")
+    .getPublicUrl(fileName);
+
+  return data.publicUrl;
+}
+
 // === DB: 유저 등록 화장실 ===
 
 /**
