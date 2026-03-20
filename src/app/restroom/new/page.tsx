@@ -3,7 +3,7 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Script from "next/script";
-import { ArrowLeft, MapPin, CheckCircle, Loader2, Camera, X, ChevronRight } from "lucide-react";
+import { ArrowLeft, MapPin, CheckCircle, Loader2, Camera, X, ChevronRight, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -66,6 +66,11 @@ export default function NewRestroomPage() {
   const [useCurrentLocation, setUseCurrentLocation] = useState(false);
   const [kakaoReady, setKakaoReady] = useState(false);
   const pendingCoords = useRef<{ lat: number; lng: number } | null>(null);
+  const [addressQuery, setAddressQuery] = useState("");
+  const [addressResults, setAddressResults] = useState<Array<{ address: string; lat: number; lng: number }>>([]);
+  const [showResults, setShowResults] = useState(false);
+  const [searching, setSearching] = useState(false);
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const KAKAO_API_KEY = process.env.NEXT_PUBLIC_KAKAO_MAP_API_KEY;
   const currentStep = STEPS[step];
@@ -117,6 +122,47 @@ export default function NewRestroomPage() {
       { enableHighAccuracy: true, timeout: 10000 }
     );
   }, [kakaoReady]);
+
+  const handleAddressSearch = useCallback((query: string) => {
+    setAddressQuery(query);
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+
+    if (!query.trim()) {
+      setAddressResults([]);
+      setShowResults(false);
+      return;
+    }
+
+    searchTimerRef.current = setTimeout(() => {
+      if (!window.kakao?.maps?.services) return;
+      setSearching(true);
+      const geocoder = new window.kakao.maps.services.Geocoder();
+      geocoder.addressSearch(query, (result, status) => {
+        setSearching(false);
+        if (status === window.kakao.maps.services.Status.OK && result.length > 0) {
+          setAddressResults(
+            result.map((r) => ({
+              address: r.road_address_name || r.address_name,
+              lat: parseFloat(r.y),
+              lng: parseFloat(r.x),
+            }))
+          );
+          setShowResults(true);
+        } else {
+          setAddressResults([]);
+          setShowResults(true);
+        }
+      });
+    }, 300);
+  }, []);
+
+  const handleSelectAddress = (item: { address: string; lat: number; lng: number }) => {
+    setAddress(item.address);
+    setLat(item.lat);
+    setLng(item.lng);
+    setAddressQuery(item.address);
+    setShowResults(false);
+  };
 
   const toggleTag = (tag: string) => {
     setSelectedTags((prev) =>
@@ -289,10 +335,53 @@ export default function NewRestroomPage() {
               />
             </div>
 
+            <div className="relative flex flex-col gap-1.5">
+              <label className="text-sm font-medium">주소 검색 *</label>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  placeholder="도로명 또는 지번 주소 입력..."
+                  className="pl-9 pr-9"
+                  value={addressQuery}
+                  onChange={(e) => handleAddressSearch(e.target.value)}
+                  onFocus={() => { if (addressResults.length > 0) setShowResults(true); }}
+                />
+                {searching && (
+                  <Loader2 className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-muted-foreground" />
+                )}
+              </div>
+              {showResults && (
+                <div className="absolute left-0 right-0 top-[calc(100%+4px)] z-50 max-h-48 overflow-y-auto rounded-lg border bg-background shadow-lg">
+                  {addressResults.length > 0 ? (
+                    addressResults.map((item, i) => (
+                      <button
+                        key={i}
+                        type="button"
+                        className="flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm hover:bg-muted/60"
+                        onClick={() => handleSelectAddress(item)}
+                      >
+                        <MapPin className="h-3.5 w-3.5 shrink-0 text-emerald-500" />
+                        <span className="truncate">{item.address}</span>
+                      </button>
+                    ))
+                  ) : (
+                    <p className="px-3 py-3 text-center text-sm text-muted-foreground">검색 결과가 없습니다</p>
+                  )}
+                </div>
+              )}
+              {lat !== null && address && (
+                <div className="flex items-center gap-1.5 text-xs text-emerald-600">
+                  <CheckCircle className="h-3 w-3" />
+                  <span>{address} ({lat.toFixed(4)}, {lng!.toFixed(4)})</span>
+                </div>
+              )}
+            </div>
+
             <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium">위치 좌표 *</label>
+              <label className="text-sm font-medium text-muted-foreground">또는 현재 위치 사용</label>
               <Button
                 variant="outline"
+                size="sm"
                 onClick={handleUseCurrentLocation}
                 disabled={useCurrentLocation}
                 className="w-full justify-start gap-2"
@@ -302,25 +391,8 @@ export default function NewRestroomPage() {
                 ) : (
                   <MapPin className="h-4 w-4" />
                 )}
-                {lat !== null
-                  ? `${lat.toFixed(4)}, ${lng!.toFixed(4)}`
-                  : "현재 위치로 설정하기"}
+                현재 위치로 설정하기
               </Button>
-              {lat !== null && (
-                <p className="text-xs text-emerald-600">위치가 설정되었습니다</p>
-              )}
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <label className="text-sm font-medium">주소 *</label>
-              <Input
-                placeholder="예: 서울 강남구 테헤란로 123"
-                value={address}
-                onChange={(e) => setAddress(e.target.value)}
-              />
-              {lat !== null && !address && (
-                <p className="text-xs text-muted-foreground">위치 설정 시 자동으로 채워집니다</p>
-              )}
             </div>
           </div>
         )}
