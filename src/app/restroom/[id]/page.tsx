@@ -274,7 +274,7 @@ export default function RestroomDetailPage() {
         {showEditModal && (
           <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40" onClick={() => setShowEditModal(false)}>
             <div
-              className="w-full max-w-md rounded-t-2xl bg-background p-5 pb-8"
+              className="w-full max-w-md rounded-t-2xl bg-background p-5 pb-20 max-h-[85vh] overflow-y-auto"
               onClick={(e) => e.stopPropagation()}
             >
               {editSubmitted ? (
