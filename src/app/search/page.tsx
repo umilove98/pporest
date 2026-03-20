@@ -5,8 +5,7 @@ import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { RestroomCard } from "@/components/restroom/restroom-card";
-import { loadPublicRestrooms, searchPublicRestrooms, toRestroom } from "@/lib/api";
-import { mockRestrooms } from "@/lib/mock-data";
+import { searchPublicRestroomsDB, toRestroom } from "@/lib/api";
 import { Restroom } from "@/lib/types";
 
 const filters = ["장애인 접근 가능", "기저귀 교환대", "24시간"];
@@ -14,7 +13,7 @@ const filters = ["장애인 접근 가능", "기저귀 교환대", "24시간"];
 export default function SearchPage() {
   const [query, setQuery] = useState("");
   const [activeFilters, setActiveFilters] = useState<string[]>([]);
-  const [restrooms, setRestrooms] = useState<Restroom[]>(mockRestrooms);
+  const [restrooms, setRestrooms] = useState<Restroom[]>([]);
   const [loading, setLoading] = useState(false);
 
   const toggleFilter = (filter: string) => {
@@ -26,19 +25,10 @@ export default function SearchPage() {
   const doSearch = useCallback(async () => {
     setLoading(true);
     try {
-      const publicData = await loadPublicRestrooms();
-      const filtered = searchPublicRestrooms(publicData, query, activeFilters);
-      setRestrooms(filtered.map((p) => toRestroom(p)));
+      const results = await searchPublicRestroomsDB(query, activeFilters);
+      setRestrooms(results.map((p) => toRestroom(p)));
     } catch {
-      // 로드 실패 시 mock 데이터 로컬 필터링
-      const filtered = mockRestrooms.filter((r) => {
-        const matchesQuery = query === "" || r.name.includes(query) || r.address.includes(query);
-        const matchesFilters =
-          activeFilters.length === 0 ||
-          activeFilters.every((f) => r.tags.includes(f));
-        return matchesQuery && matchesFilters;
-      });
-      setRestrooms(filtered);
+      setRestrooms([]);
     } finally {
       setLoading(false);
     }

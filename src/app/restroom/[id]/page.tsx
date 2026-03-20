@@ -11,9 +11,8 @@ import { StarRating } from "@/components/restroom/star-rating";
 import { PhotoGrid } from "@/components/restroom/photo-grid";
 import { ReviewCard } from "@/components/restroom/review-card";
 import { Input } from "@/components/ui/input";
-import { loadPublicRestrooms, toRestroom, getReviewsByKey, createEditRequest, getSafetyCount, checkSafety, hasCheckedSafetyToday } from "@/lib/api";
+import { getPublicRestroomById, toRestroom, getReviewsByKey, createEditRequest, getSafetyCount, checkSafety, hasCheckedSafetyToday } from "@/lib/api";
 import { useAuth } from "@/components/auth/auth-provider";
-import { mockRestrooms, mockReviews } from "@/lib/mock-data";
 import { Restroom, Review } from "@/lib/types";
 
 export default function RestroomDetailPage() {
@@ -37,27 +36,18 @@ export default function RestroomDetailPage() {
   useEffect(() => {
     async function fetchData() {
       try {
-        // 정적 데이터에서 화장실 찾기
-        const publicData = await loadPublicRestrooms();
-        const found = publicData.find((p) => p.id === id);
-
+        const found = await getPublicRestroomById(id);
         if (found) {
           setRestroom(toRestroom(found));
         } else {
-          // mock fallback
-          setRestroom(mockRestrooms.find((r) => r.id === id) ?? null);
+          setRestroom(null);
         }
 
-        // DB에서 리뷰 조회
-        try {
-          const revs = await getReviewsByKey(id);
-          setReviews(revs);
-        } catch {
-          setReviews(mockReviews.filter((r) => r.restroom_id === id));
-        }
+        const revs = await getReviewsByKey(id);
+        setReviews(revs);
       } catch {
-        setRestroom(mockRestrooms.find((r) => r.id === id) ?? null);
-        setReviews(mockReviews.filter((r) => r.restroom_id === id));
+        setRestroom(null);
+        setReviews([]);
       } finally {
         setLoading(false);
       }

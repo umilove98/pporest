@@ -5,8 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ReviewForm } from "@/components/restroom/review-form";
-import { loadPublicRestrooms } from "@/lib/api";
-import { mockRestrooms } from "@/lib/mock-data";
+import { getPublicRestroomById } from "@/lib/api";
 
 export default function WriteReviewPage() {
   const { id } = useParams<{ id: string }>();
@@ -14,15 +13,9 @@ export default function WriteReviewPage() {
   const [restroomName, setRestroomName] = useState("");
 
   useEffect(() => {
-    loadPublicRestrooms()
-      .then((data) => {
-        const found = data.find((p) => p.id === id);
-        setRestroomName(found?.name ?? "");
-      })
-      .catch(() => {
-        const mock = mockRestrooms.find((r) => r.id === id);
-        setRestroomName(mock?.name ?? "");
-      });
+    getPublicRestroomById(id)
+      .then((found) => setRestroomName(found?.name ?? ""))
+      .catch(() => setRestroomName(""));
   }, [id]);
 
   return (

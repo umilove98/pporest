@@ -135,7 +135,7 @@ Run `supabase/schema.sql` in Supabase SQL Editor to create:
 
 ## Architecture Notes
 
-- **공공 화장실 데이터**: 정적 JSON (public/data/) — 지도 bounds 확정 후 lazy load, bounds 내 최대 50개 마커 + 20개 리스트
+- **공공 화장실 데이터**: Supabase `public_restrooms` 테이블 — bounds/검색 쿼리로 DB 직접 조회, 시드는 `scripts/seed-public-restrooms.ts`
 - **유저 등록 화장실/리뷰/안전확인**: Supabase DB 직접 사용. localStorage fallback 절대 금지
 - **PWA**: manifest.json + service worker로 홈 화면 설치 지원
 - **지도**: Kakao Maps SDK, 내 위치 파란 점 마커, idle 디바운스 300ms

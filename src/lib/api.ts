@@ -1,20 +1,70 @@
 import { supabase } from "./supabase";
 import { EditRequest, PublicRestroom, Restroom, Review, UserRestroom } from "./types";
 
-// === 정적 공공데이터 로드 ===
-
-let publicDataCache: PublicRestroom[] | null = null;
+// === 공공 화장실 DB 조회 ===
 
 /**
- * 정적 JSON에서 공공 화장실 데이터 로드
+ * bounds 내 공공 화장실 조회 (지도 표시용)
  */
-export async function loadPublicRestrooms(): Promise<PublicRestroom[]> {
-  if (publicDataCache) return publicDataCache;
+export async function getPublicRestroomsByBounds(
+  swLat: number, swLng: number, neLat: number, neLng: number,
+  limit = 50
+): Promise<PublicRestroom[]> {
+  const { data, error } = await supabase
+    .from("public_restrooms")
+    .select("*")
+    .gte("lat", swLat)
+    .lte("lat", neLat)
+    .gte("lng", swLng)
+    .lte("lng", neLng)
+    .limit(limit);
 
-  const res = await fetch("/data/public-restrooms.json");
-  if (!res.ok) throw new Error("공공 화장실 데이터를 불러올 수 없습니다.");
-  publicDataCache = await res.json();
-  return publicDataCache!;
+  if (error) throw error;
+  return (data ?? []) as PublicRestroom[];
+}
+
+/**
+ * ID로 공공 화장실 단건 조회
+ */
+export async function getPublicRestroomById(id: string): Promise<PublicRestroom | null> {
+  const { data, error } = await supabase
+    .from("public_restrooms")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data as PublicRestroom | null;
+}
+
+/**
+ * 공공 화장실 검색 (DB ILIKE + 필터)
+ */
+export async function searchPublicRestroomsDB(
+  query: string,
+  filters: string[],
+  limit = 50
+): Promise<PublicRestroom[]> {
+  let q = supabase.from("public_restrooms").select("*");
+
+  if (query) {
+    q = q.or(`name.ilike.%${query}%,address.ilike.%${query}%`);
+  }
+
+  if (filters.includes("장애인 접근 가능")) {
+    q = q.eq("disabled", true);
+  }
+  if (filters.includes("기저귀 교환대")) {
+    q = q.eq("diaper", true);
+  }
+  if (filters.includes("24시간")) {
+    q = q.ilike("hours", "%24시간%");
+  }
+
+  const { data, error } = await q.limit(limit);
+
+  if (error) throw error;
+  return (data ?? []) as PublicRestroom[];
 }
 
 /**
@@ -174,36 +224,6 @@ export async function getReviewsByUserId(userId: string): Promise<Review[]> {
   } catch {
     return [];
   }
-}
-
-/**
- * 검색 (정적 데이터에서 클라이언트 검색)
- */
-export function searchPublicRestrooms(
-  restrooms: PublicRestroom[],
-  query: string,
-  filters: string[]
-): PublicRestroom[] {
-  let results = restrooms;
-
-  if (query) {
-    const q = query.toLowerCase();
-    results = results.filter(
-      (r) => r.name.toLowerCase().includes(q) || r.address.toLowerCase().includes(q)
-    );
-  }
-
-  if (filters.includes("장애인 접근 가능")) {
-    results = results.filter((r) => r.disabled);
-  }
-  if (filters.includes("기저귀 교환대")) {
-    results = results.filter((r) => r.diaper);
-  }
-  if (filters.includes("24시간")) {
-    results = results.filter((r) => r.hours?.includes("24시간"));
-  }
-
-  return results;
 }
 
 // === 수정 요청 ===
