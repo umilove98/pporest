@@ -1,10 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { MapPin, Plus } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
-import { MapView } from "@/components/restroom/map-view";
+import { MapView, MapBounds } from "@/components/restroom/map-view";
 import { RestroomCard } from "@/components/restroom/restroom-card";
 import { getRestrooms } from "@/lib/api";
 import { mockRestrooms } from "@/lib/mock-data";
@@ -16,6 +16,11 @@ export default function HomePage() {
   const [loading, setLoading] = useState(true);
   const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [currentAddress, setCurrentAddress] = useState<string | null>(null);
+  const [mapBounds, setMapBounds] = useState<MapBounds | null>(null);
+
+  const handleBoundsChange = useCallback((bounds: MapBounds) => {
+    setMapBounds(bounds);
+  }, []);
 
   // 현재 위치 가져오기
   useEffect(() => {
@@ -74,6 +79,17 @@ export default function HomePage() {
     });
   }
 
+  // 지도 bounds 내 화장실만 필터링
+  const visibleRestrooms = mapBounds
+    ? restroomsWithDistance.filter(
+        (r) =>
+          r.lat >= mapBounds.sw.lat &&
+          r.lat <= mapBounds.ne.lat &&
+          r.lng >= mapBounds.sw.lng &&
+          r.lng <= mapBounds.ne.lng
+      )
+    : restroomsWithDistance;
+
   return (
     <div className="flex flex-col">
       {/* Header */}
@@ -87,7 +103,7 @@ export default function HomePage() {
 
       {/* Map */}
       <div className="px-4 pt-4">
-        <MapView restrooms={restroomsWithDistance} userLocation={location} />
+        <MapView restrooms={restroomsWithDistance} userLocation={location} onBoundsChange={handleBoundsChange} />
       </div>
 
       <div className="px-4 py-3">
@@ -99,7 +115,7 @@ export default function HomePage() {
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-sm font-semibold">주변 화장실</h2>
           <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">{restroomsWithDistance.length}개</span>
+            <span className="text-xs text-muted-foreground">{visibleRestrooms.length}개</span>
             <Link
               href="/restroom/new"
               className="flex items-center gap-1 rounded-full bg-emerald-500 px-2.5 py-1 text-xs font-medium text-white hover:bg-emerald-600"
@@ -113,9 +129,13 @@ export default function HomePage() {
           <div className="flex justify-center py-8">
             <p className="text-sm text-muted-foreground">로딩 중...</p>
           </div>
+        ) : visibleRestrooms.length === 0 ? (
+          <div className="flex justify-center py-8">
+            <p className="text-sm text-muted-foreground">지도 영역 내 화장실이 없습니다. 지도를 이동해보세요.</p>
+          </div>
         ) : (
           <div className="flex flex-col gap-3 pb-4">
-            {restroomsWithDistance.map((restroom) => (
+            {visibleRestrooms.map((restroom) => (
               <RestroomCard key={restroom.id} restroom={restroom} />
             ))}
           </div>

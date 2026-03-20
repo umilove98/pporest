@@ -29,9 +29,15 @@ declare global {
   }
 }
 
+interface KakaoBounds {
+  getSouthWest: () => { getLat: () => number; getLng: () => number };
+  getNorthEast: () => { getLat: () => number; getLng: () => number };
+}
+
 interface KakaoMap {
   setCenter: (latlng: unknown) => void;
   relayout: () => void;
+  getBounds: () => KakaoBounds;
 }
 
 interface KakaoMarker {
@@ -56,15 +62,21 @@ interface KakaoGeocoder {
   ) => void;
 }
 
+export interface MapBounds {
+  sw: { lat: number; lng: number };
+  ne: { lat: number; lng: number };
+}
+
 interface MapViewProps {
   restrooms: Restroom[];
   userLocation?: { lat: number; lng: number } | null;
   className?: string;
+  onBoundsChange?: (bounds: MapBounds) => void;
 }
 
 const KAKAO_API_KEY = process.env.NEXT_PUBLIC_KAKAO_MAP_API_KEY;
 
-export function MapView({ restrooms, userLocation, className = "" }: MapViewProps) {
+export function MapView({ restrooms, userLocation, className = "", onBoundsChange }: MapViewProps) {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<KakaoMap | null>(null);
   const [sdkReady, setSdkReady] = useState(false);
@@ -106,7 +118,33 @@ export function MapView({ restrooms, userLocation, className = "" }: MapViewProp
     mapInstanceRef.current = map;
 
     // 컨테이너 크기 변경 대응
-    setTimeout(() => map.relayout(), 100);
+    setTimeout(() => {
+      map.relayout();
+      // 초기 bounds 전달
+      if (onBoundsChange) {
+        const bounds = map.getBounds();
+        const sw = bounds.getSouthWest();
+        const ne = bounds.getNorthEast();
+        onBoundsChange({
+          sw: { lat: sw.getLat(), lng: sw.getLng() },
+          ne: { lat: ne.getLat(), lng: ne.getLng() },
+        });
+      }
+    }, 100);
+
+    // 지도 이동/줌 시 bounds 업데이트
+    if (onBoundsChange) {
+      const handleBoundsChanged = () => {
+        const bounds = map.getBounds();
+        const sw = bounds.getSouthWest();
+        const ne = bounds.getNorthEast();
+        onBoundsChange({
+          sw: { lat: sw.getLat(), lng: sw.getLng() },
+          ne: { lat: ne.getLat(), lng: ne.getLng() },
+        });
+      };
+      kakao.maps.event.addListener(map, "idle", handleBoundsChanged);
+    }
 
     let openInfoWindow: KakaoInfoWindow | null = null;
 
