@@ -53,7 +53,7 @@ export default function HomePage() {
     <div className="flex flex-col">
       {/* Header */}
       <header className="sticky top-0 z-40 border-b bg-background px-4 py-3">
-        <h1 className="text-lg font-bold">PPORest</h1>
+        <h1 className="text-lg"><span className="font-light">PPO</span><span className="font-bold text-emerald-500">Rest</span></h1>
         <div className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
           <MapPin className="h-3 w-3" />
           <span>{location ? "현재 위치 기반" : "서울특별시 강남구 근처"}</span>
