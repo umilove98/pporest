@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/components/auth/auth-provider";
-import { createUserRestroom } from "@/lib/api";
+import { createUserRestroom, uploadPhoto } from "@/lib/api";
 
 const FACILITY_OPTIONS = [
   { key: "has_disabled_access", label: "장애인 접근 가능" },
@@ -153,8 +153,8 @@ export default function NewRestroomPage() {
     try {
       const photoUrls: string[] = [];
       for (const photo of photos) {
-        const base64 = await fileToBase64(photo.file);
-        photoUrls.push(base64);
+        const url = await uploadPhoto(photo.file, user.id);
+        photoUrls.push(url);
       }
 
       await createUserRestroom({
@@ -593,11 +593,3 @@ export default function NewRestroomPage() {
   );
 }
 
-function fileToBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-}
