@@ -17,6 +17,10 @@ declare global {
         Size: new (width: number, height: number) => unknown;
         Point: new (x: number, y: number) => unknown;
         InfoWindow: new (options: { content: string }) => KakaoInfoWindow;
+        services: {
+          Geocoder: new () => KakaoGeocoder;
+          Status: { OK: string };
+        };
         event: {
           addListener: (target: unknown, type: string, handler: () => void) => void;
         };
@@ -37,6 +41,19 @@ interface KakaoMarker {
 interface KakaoInfoWindow {
   open: (map: KakaoMap, marker: KakaoMarker) => void;
   close: () => void;
+}
+
+interface KakaoGeocoder {
+  coord2RegionCode: (
+    lng: number,
+    lat: number,
+    callback: (result: Array<{ address_name: string; region_type: string }>, status: string) => void
+  ) => void;
+  coord2Address: (
+    lng: number,
+    lat: number,
+    callback: (result: Array<{ address: { address_name: string }; road_address: { address_name: string } | null }>, status: string) => void
+  ) => void;
 }
 
 interface MapViewProps {
@@ -135,7 +152,7 @@ export function MapView({ restrooms, userLocation, className = "" }: MapViewProp
     <>
       {/* next/script로 카카오맵 SDK 로드 — 중복 방지 내장 */}
       <Script
-        src={`https://dapi.kakao.com/v2/maps/sdk.js?appkey=${KAKAO_API_KEY}&autoload=false`}
+        src={`https://dapi.kakao.com/v2/maps/sdk.js?appkey=${KAKAO_API_KEY}&libraries=services&autoload=false`}
         strategy="afterInteractive"
         onLoad={handleScriptLoad}
         onError={() => setError(true)}

@@ -14,6 +14,7 @@ export default function HomePage() {
   const [restrooms, setRestrooms] = useState<Restroom[]>(mockRestrooms);
   const [loading, setLoading] = useState(true);
   const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [currentAddress, setCurrentAddress] = useState<string | null>(null);
 
   // 현재 위치 가져오기
   useEffect(() => {
@@ -24,6 +25,29 @@ export default function HomePage() {
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
   }, []);
+
+  // 역지오코딩: 좌표 → 주소 변환
+  useEffect(() => {
+    if (!location) return;
+    // 카카오맵 SDK가 로드될 때까지 대기
+    const tryGeocode = () => {
+      if (!window.kakao?.maps?.services) return false;
+      const geocoder = new window.kakao.maps.services.Geocoder();
+      geocoder.coord2Address(location.lng, location.lat, (result, status) => {
+        if (status === window.kakao.maps.services.Status.OK && result[0]) {
+          const addr = result[0].road_address?.address_name || result[0].address.address_name;
+          setCurrentAddress(addr);
+        }
+      });
+      return true;
+    };
+    if (tryGeocode()) return;
+    // SDK 아직 안 로드됐으면 폴링
+    const interval = setInterval(() => {
+      if (tryGeocode()) clearInterval(interval);
+    }, 500);
+    return () => clearInterval(interval);
+  }, [location]);
 
   // 화장실 목록 로드
   useEffect(() => {
@@ -56,7 +80,7 @@ export default function HomePage() {
         <h1 className="text-lg"><span className="font-light">PPO</span><span className="font-bold text-emerald-500">Rest</span></h1>
         <div className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
           <MapPin className="h-3 w-3" />
-          <span>{location ? "현재 위치 기반" : "서울특별시 강남구 근처"}</span>
+          <span>{currentAddress ? currentAddress : location ? "현재 위치 확인 중..." : "서울특별시 강남구 근처"}</span>
         </div>
       </header>
 
