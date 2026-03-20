@@ -12,7 +12,10 @@ declare global {
         load: (callback: () => void) => void;
         Map: new (container: HTMLElement, options: { center: unknown; level: number }) => KakaoMap;
         LatLng: new (lat: number, lng: number) => unknown;
-        Marker: new (options: { position: unknown; map: KakaoMap }) => KakaoMarker;
+        Marker: new (options: { position: unknown; map: KakaoMap; image?: unknown }) => KakaoMarker;
+        MarkerImage: new (src: string, size: unknown, options?: { offset: unknown }) => unknown;
+        Size: new (width: number, height: number) => unknown;
+        Point: new (x: number, y: number) => unknown;
         InfoWindow: new (options: { content: string }) => KakaoInfoWindow;
         event: {
           addListener: (target: unknown, type: string, handler: () => void) => void;
@@ -38,12 +41,13 @@ interface KakaoInfoWindow {
 
 interface MapViewProps {
   restrooms: Restroom[];
+  userLocation?: { lat: number; lng: number } | null;
   className?: string;
 }
 
 const KAKAO_API_KEY = process.env.NEXT_PUBLIC_KAKAO_MAP_API_KEY;
 
-export function MapView({ restrooms, className = "" }: MapViewProps) {
+export function MapView({ restrooms, userLocation, className = "" }: MapViewProps) {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<KakaoMap | null>(null);
   const [sdkReady, setSdkReady] = useState(false);
@@ -72,8 +76,11 @@ export function MapView({ restrooms, className = "" }: MapViewProps) {
     if (!sdkReady || !mapRef.current || restrooms.length === 0) return;
 
     const { kakao } = window;
-    const centerRestroom = restrooms[0];
-    const center = new kakao.maps.LatLng(centerRestroom.lat, centerRestroom.lng);
+
+    // 사용자 위치가 있으면 사용자 위치를, 없으면 첫 번째 화장실을 중심으로
+    const centerLat = userLocation?.lat ?? restrooms[0].lat;
+    const centerLng = userLocation?.lng ?? restrooms[0].lng;
+    const center = new kakao.maps.LatLng(centerLat, centerLng);
 
     const map = new kakao.maps.Map(mapRef.current, {
       center,
@@ -86,9 +93,19 @@ export function MapView({ restrooms, className = "" }: MapViewProps) {
 
     let openInfoWindow: KakaoInfoWindow | null = null;
 
+    // 녹색 커스텀 마커
+    const markerSvg = encodeURIComponent(
+      `<svg xmlns="http://www.w3.org/2000/svg" width="28" height="40" viewBox="0 0 28 40"><path d="M14 0C6.27 0 0 6.27 0 14c0 10.5 14 26 14 26s14-15.5 14-26C28 6.27 21.73 0 14 0z" fill="#10b981"/><circle cx="14" cy="14" r="6" fill="white"/></svg>`
+    );
+    const markerImage = new kakao.maps.MarkerImage(
+      `data:image/svg+xml,${markerSvg}`,
+      new kakao.maps.Size(28, 40),
+      { offset: new kakao.maps.Point(14, 40) }
+    );
+
     restrooms.forEach((r) => {
       const position = new kakao.maps.LatLng(r.lat, r.lng);
-      const marker = new kakao.maps.Marker({ position, map });
+      const marker = new kakao.maps.Marker({ position, map, image: markerImage });
 
       const infoWindow = new kakao.maps.InfoWindow({
         content: `<div style="padding:4px 8px;font-size:12px;white-space:nowrap;">${r.name}</div>`,
@@ -100,7 +117,7 @@ export function MapView({ restrooms, className = "" }: MapViewProps) {
         openInfoWindow = infoWindow;
       });
     });
-  }, [sdkReady, restrooms]);
+  }, [sdkReady, restrooms, userLocation]);
 
   // API 키 없으면 placeholder
   if (error) {

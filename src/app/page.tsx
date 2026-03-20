@@ -20,7 +20,8 @@ export default function HomePage() {
     if (!navigator.geolocation) return;
     navigator.geolocation.getCurrentPosition(
       (pos) => setLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-      () => {} // 위치 권한 거부 시 무시
+      () => {}, // 위치 권한 거부 시 무시
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     );
   }, []);
 
@@ -52,7 +53,7 @@ export default function HomePage() {
     <div className="flex flex-col">
       {/* Header */}
       <header className="sticky top-0 z-40 border-b bg-background px-4 py-3">
-        <h1 className="text-lg font-bold">PPORest</h1>
+        <h1 className="text-lg"><span className="font-light">PPO</span><span className="font-bold text-emerald-500">Rest</span></h1>
         <div className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
           <MapPin className="h-3 w-3" />
           <span>{location ? "현재 위치 기반" : "서울특별시 강남구 근처"}</span>
@@ -61,7 +62,7 @@ export default function HomePage() {
 
       {/* Map */}
       <div className="px-4 pt-4">
-        <MapView restrooms={restroomsWithDistance} />
+        <MapView restrooms={restroomsWithDistance} userLocation={location} />
       </div>
 
       <div className="px-4 py-3">
