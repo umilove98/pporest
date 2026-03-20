@@ -55,7 +55,7 @@ export interface Restroom {
 
 export interface Review {
   id: string;
-  restroom_key: string; // public_data_id 또는 user_restroom uuid
+  restroom_id: string; // public_data_id 또는 user_restroom uuid
   user_id: string;
   user_name: string;
   rating: number;

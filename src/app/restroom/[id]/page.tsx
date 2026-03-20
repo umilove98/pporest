@@ -40,11 +40,11 @@ export default function RestroomDetailPage() {
           const revs = await getReviewsByKey(id);
           setReviews(revs);
         } catch {
-          setReviews(mockReviews.filter((r) => r.restroom_key === id));
+          setReviews(mockReviews.filter((r) => r.restroom_id === id));
         }
       } catch {
         setRestroom(mockRestrooms.find((r) => r.id === id) ?? null);
-        setReviews(mockReviews.filter((r) => r.restroom_key === id));
+        setReviews(mockReviews.filter((r) => r.restroom_id === id));
       } finally {
         setLoading(false);
       }

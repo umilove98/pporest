@@ -53,23 +53,27 @@ export function toRestroom(
 // === DB: 유저 등록 화장실 ===
 
 /**
- * 승인된 유저 등록 화장실 목록
+ * 승인된 유저 등록 화장실 목록 (DB 없으면 빈 배열 반환)
  */
 export async function getUserRestrooms(): Promise<Restroom[]> {
-  const { data, error } = await supabase
-    .from("user_restrooms")
-    .select("*")
-    .eq("status", "approved")
-    .order("created_at", { ascending: false });
+  try {
+    const { data, error } = await supabase
+      .from("user_restrooms")
+      .select("*")
+      .eq("status", "approved")
+      .order("created_at", { ascending: false });
 
-  if (error) throw error;
+    if (error) return [];
 
-  return (data as UserRestroom[]).map((r) => ({
-    ...r,
-    source: "user" as const,
-    rating: 0,
-    review_count: 0,
-  }));
+    return (data as UserRestroom[]).map((r) => ({
+      ...r,
+      source: "user" as const,
+      rating: 0,
+      review_count: 0,
+    }));
+  } catch {
+    return [];
+  }
 }
 
 /**
@@ -108,46 +112,25 @@ export async function createUserRestroom(restroom: {
  * 특정 화장실의 리뷰 목록
  */
 export async function getReviewsByKey(restroomKey: string): Promise<Review[]> {
-  const { data, error } = await supabase
-    .from("reviews")
-    .select("*")
-    .eq("restroom_key", restroomKey)
-    .order("created_at", { ascending: false });
+  try {
+    const { data, error } = await supabase
+      .from("reviews")
+      .select("*")
+      .eq("restroom_id", restroomKey)
+      .order("created_at", { ascending: false });
 
-  if (error) throw error;
-  return data as Review[];
-}
-
-/**
- * 리뷰 집계 (restroom_key별 평균 평점/리뷰 수) - 여러 키 한번에 조회
- */
-export async function getReviewStats(
-  keys: string[]
-): Promise<Record<string, { rating: number; review_count: number }>> {
-  if (keys.length === 0) return {};
-
-  const { data, error } = await supabase
-    .from("review_stats")
-    .select("*")
-    .in("restroom_key", keys);
-
-  if (error) throw error;
-
-  const result: Record<string, { rating: number; review_count: number }> = {};
-  for (const row of data ?? []) {
-    result[row.restroom_key] = {
-      rating: row.rating,
-      review_count: row.review_count,
-    };
+    if (error) return [];
+    return (data ?? []) as Review[];
+  } catch {
+    return [];
   }
-  return result;
 }
 
 /**
  * 리뷰 등록
  */
 export async function createReview(review: {
-  restroom_key: string;
+  restroom_id: string;
   user_id: string;
   user_name: string;
   rating: number;
@@ -166,17 +149,21 @@ export async function createReview(review: {
 }
 
 /**
- * 특정 사용자의 리뷰 목록
+ * 특정 사용자의 리뷰 목록 (에러 시 빈 배열)
  */
 export async function getReviewsByUserId(userId: string): Promise<Review[]> {
-  const { data, error } = await supabase
-    .from("reviews")
-    .select("*")
-    .eq("user_id", userId)
-    .order("created_at", { ascending: false });
+  try {
+    const { data, error } = await supabase
+      .from("reviews")
+      .select("*")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false });
 
-  if (error) throw error;
-  return data as Review[];
+    if (error) return [];
+    return (data ?? []) as Review[];
+  } catch {
+    return [];
+  }
 }
 
 /**

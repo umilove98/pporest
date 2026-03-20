@@ -3,24 +3,34 @@
  *
  * 사용법:
  *   npx tsx scripts/convert-csv.ts
- *   npx tsx scripts/convert-csv.ts --region 서울
- *   npx tsx scripts/convert-csv.ts --region 경기
  *
- * 입력: data/public-restrooms.csv (data.go.kr에서 다운로드)
+ * data/ 폴더에 있는 모든 CSV 파일을 읽어서 하나의 JSON으로 합칩니다.
+ * 파일명 예시:
+ *   - 공중화장실정보_서울특별시.csv
+ *   - 공중화장실정보_경기도.csv
+ *   - public-restrooms.csv (단일 파일)
+ *
  * 출력: public/data/public-restrooms.json
  */
 
 import * as fs from "fs";
 import * as path from "path";
 
-const CSV_PATH = path.resolve(__dirname, "../data/public-restrooms.csv");
+const DATA_DIR = path.resolve(__dirname, "../data");
 const OUTPUT_PATH = path.resolve(__dirname, "../public/data/public-restrooms.json");
 
-const regionArg = process.argv.find((_, i) => process.argv[i - 1] === "--region");
-
-function decodeCP949(buffer: Buffer): string {
-  const decoder = new TextDecoder("euc-kr");
-  return decoder.decode(buffer);
+function decodeFile(buffer: Buffer): string {
+  // UTF-8 BOM
+  if (buffer[0] === 0xef && buffer[1] === 0xbb && buffer[2] === 0xbf) {
+    return buffer.toString("utf-8");
+  }
+  // CP949/EUC-KR 시도
+  try {
+    const decoded = new TextDecoder("euc-kr").decode(buffer);
+    // 한글이 포함되어 있으면 CP949으로 간주
+    if (/[가-힣]/.test(decoded)) return decoded;
+  } catch { /* ignore */ }
+  return buffer.toString("utf-8");
 }
 
 function parseCSVLine(line: string): string[] {
@@ -57,44 +67,24 @@ function parseCSVLine(line: string): string[] {
 }
 
 interface PublicRestroom {
-  id: string;          // public_data_id (조회키)
+  id: string;
   name: string;
   address: string;
   lat: number;
   lng: number;
-  disabled: boolean;   // 장애인 화장실
-  diaper: boolean;     // 기저귀 교환대
-  hours: string | null; // 개방시간
+  disabled: boolean;
+  diaper: boolean;
+  hours: string | null;
 }
 
-function main() {
-  if (!fs.existsSync(CSV_PATH)) {
-    console.error(`CSV 파일을 찾을 수 없습니다: ${CSV_PATH}`);
-    console.error("");
-    console.error("다운로드 방법:");
-    console.error("  1. https://www.data.go.kr/data/15012892/standard.do 접속");
-    console.error("  2. CSV 다운로드");
-    console.error("  3. data/public-restrooms.csv 에 배치");
-    process.exit(1);
-  }
+function processCSV(filePath: string, startId: number): { results: PublicRestroom[]; skipped: number } {
+  const buffer = fs.readFileSync(filePath);
+  const content = decodeFile(buffer);
+  const lines = content.split(/\r?\n/).filter((l) => l.trim());
 
-  console.log("CSV 파일 읽는 중...");
-  const buffer = fs.readFileSync(CSV_PATH);
+  if (lines.length < 2) return { results: [], skipped: 0 };
 
-  let content: string;
-  if (buffer[0] === 0xef && buffer[1] === 0xbb && buffer[2] === 0xbf) {
-    content = buffer.toString("utf-8");
-  } else {
-    try {
-      content = decodeCP949(buffer);
-    } catch {
-      content = buffer.toString("utf-8");
-    }
-  }
-
-  const lines = content.split("\n").filter((l) => l.trim());
   const headers = parseCSVLine(lines[0]);
-
   const col = (name: string) => headers.findIndex((h) => h.includes(name));
 
   const iName = col("화장실명");
@@ -108,18 +98,14 @@ function main() {
   const iHours = col("개방시간상세");
   const iHoursBasic = col("개방시간");
 
-  console.log(`컬럼: 화장실명=${iName}, 주소=${iRoadAddr}, 위도=${iLat}, 경도=${iLng}`);
-
   if (iName === -1 || iLat === -1 || iLng === -1) {
-    console.error("필수 컬럼을 찾을 수 없습니다.");
-    console.error("헤더:", headers.join(" | "));
-    process.exit(1);
+    console.error(`  필수 컬럼을 찾을 수 없습니다. 헤더: ${headers.slice(0, 10).join(" | ")}...`);
+    return { results: [], skipped: 0 };
   }
-
-  if (regionArg) console.log(`지역 필터: ${regionArg}`);
 
   const results: PublicRestroom[] = [];
   let skipped = 0;
+  let id = startId;
 
   for (let i = 1; i < lines.length; i++) {
     const f = parseCSVLine(lines[i]);
@@ -132,7 +118,6 @@ function main() {
 
     if (!name || !address || isNaN(lat) || isNaN(lng) || lat === 0 || lng === 0) { skipped++; continue; }
     if (lat < 33 || lat > 39 || lng < 124 || lng > 132) { skipped++; continue; }
-    if (regionArg && !address.startsWith(regionArg)) continue;
 
     const mDisabled = iMaleDisabled !== -1 ? parseInt(f[iMaleDisabled]) || 0 : 0;
     const fDisabled = iFemaleDisabled !== -1 ? parseInt(f[iFemaleDisabled]) || 0 : 0;
@@ -140,7 +125,7 @@ function main() {
     const hours = (iHours !== -1 ? f[iHours] : "") || (iHoursBasic !== -1 ? f[iHoursBasic] : "") || null;
 
     results.push({
-      id: `pd-${i}`,
+      id: `pd-${id++}`,
       name,
       address,
       lat,
@@ -151,15 +136,72 @@ function main() {
     });
   }
 
-  console.log(`\n유효: ${results.length}건, 스킵: ${skipped}건`);
+  return { results, skipped };
+}
 
-  // JSON 저장 (키를 짧게 하여 용량 절약)
+function main() {
+  // data/ 폴더에서 CSV 파일 찾기
+  const csvFiles = fs.readdirSync(DATA_DIR)
+    .filter((f) => f.endsWith(".csv"))
+    .map((f) => path.join(DATA_DIR, f));
+
+  if (csvFiles.length === 0) {
+    console.error("data/ 폴더에 CSV 파일이 없습니다.");
+    console.error("");
+    console.error("다운로드 방법:");
+    console.error("  1. https://www.data.go.kr/data/15012892/standard.do 접속");
+    console.error("  2. 원하는 지역의 CSV 다운로드");
+    console.error("  3. data/ 폴더에 배치");
+    console.error("");
+    console.error("예시: data/공중화장실정보_서울특별시.csv");
+    process.exit(1);
+  }
+
+  console.log(`CSV 파일 ${csvFiles.length}개 발견:\n`);
+
+  const allResults: PublicRestroom[] = [];
+  let totalSkipped = 0;
+  let nextId = 1;
+
+  for (const csvFile of csvFiles) {
+    const fileName = path.basename(csvFile);
+    console.log(`  처리 중: ${fileName}`);
+
+    const { results, skipped } = processCSV(csvFile, nextId);
+    nextId += results.length;
+    totalSkipped += skipped;
+
+    console.log(`    → 유효: ${results.length}건, 스킵: ${skipped}건`);
+    allResults.push(...results);
+  }
+
+  // 중복 제거 (같은 좌표 + 같은 이름)
+  const seen = new Set<string>();
+  const deduplicated = allResults.filter((r) => {
+    const key = `${r.lat.toFixed(5)}_${r.lng.toFixed(5)}_${r.name}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
+  const duplicates = allResults.length - deduplicated.length;
+  if (duplicates > 0) {
+    console.log(`\n  중복 제거: ${duplicates}건`);
+  }
+
+  // ID 재부여
+  const final = deduplicated.map((r, i) => ({ ...r, id: `pd-${i + 1}` }));
+
+  console.log(`\n총 결과: ${final.length}건 (스킵: ${totalSkipped}건)`);
+
+  // JSON 저장
   fs.mkdirSync(path.dirname(OUTPUT_PATH), { recursive: true });
-  fs.writeFileSync(OUTPUT_PATH, JSON.stringify(results));
+  fs.writeFileSync(OUTPUT_PATH, JSON.stringify(final));
 
+  const sizeKB = (fs.statSync(OUTPUT_PATH).size / 1024).toFixed(0);
   const sizeMB = (fs.statSync(OUTPUT_PATH).size / 1024 / 1024).toFixed(1);
-  console.log(`\n저장 완료: ${OUTPUT_PATH} (${sizeMB} MB)`);
-  console.log("Next.js 빌드 시 /data/public-restrooms.json 으로 서빙됩니다.");
+  console.log(`\n저장 완료: public/data/public-restrooms.json`);
+  console.log(`파일 크기: ${Number(sizeMB) >= 1 ? sizeMB + " MB" : sizeKB + " KB"}`);
 }
 
 main();

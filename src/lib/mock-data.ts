@@ -145,16 +145,16 @@ export const mockRestrooms: Restroom[] = [
 ];
 
 export const mockReviews: Review[] = [
-  { id: "r1", restroom_key: "pd-1", user_id: "u1", user_name: "김민수", rating: 4, comment: "깨끗하고 관리가 잘 되어 있어요.", has_photo: true, created_at: "2026-03-18" },
-  { id: "r2", restroom_key: "pd-1", user_id: "u2", user_name: "이지은", rating: 5, comment: "장애인 화장실도 넓고 편리합니다.", has_photo: false, created_at: "2026-03-15" },
-  { id: "r3", restroom_key: "pd-1", user_id: "u3", user_name: "박준영", rating: 3, comment: "점심시간에는 좀 붐벼요.", has_photo: true, created_at: "2026-03-10" },
-  { id: "r4", restroom_key: "pd-8", user_id: "u4", user_name: "최수아", rating: 4, comment: "지하상가에서 찾기 쉬운 위치에 있어요.", has_photo: false, created_at: "2026-03-17" },
-  { id: "r5", restroom_key: "pd-8", user_id: "u5", user_name: "정우진", rating: 3, comment: "사람이 많아서 대기시간이 좀 있어요.", has_photo: true, created_at: "2026-03-12" },
-  { id: "r6", restroom_key: "pd-7", user_id: "u6", user_name: "한소희", rating: 5, comment: "역 안에서 접근이 편리해요.", has_photo: true, created_at: "2026-03-16" },
-  { id: "r7", restroom_key: "pd-7", user_id: "u7", user_name: "오세준", rating: 4, comment: "전반적으로 깨끗한 상태입니다.", has_photo: false, created_at: "2026-03-11" },
-  { id: "r8", restroom_key: "pd-9", user_id: "u8", user_name: "강하늘", rating: 2, comment: "금요일 밤에는 상태가 안 좋아요.", has_photo: true, created_at: "2026-03-14" },
-  { id: "r9", restroom_key: "pd-6", user_id: "u9", user_name: "윤서연", rating: 5, comment: "DDP 화장실은 항상 깨끗해요.", has_photo: true, created_at: "2026-03-18" },
-  { id: "r10", restroom_key: "pd-6", user_id: "u10", user_name: "임재현", rating: 5, comment: "서울에서 가장 깨끗한 공용화장실 중 하나.", has_photo: false, created_at: "2026-03-13" },
-  { id: "r11", restroom_key: "pd-12", user_id: "u11", user_name: "송민지", rating: 3, comment: "위치는 좋은데 관리 상태가 아쉬워요.", has_photo: false, created_at: "2026-03-09" },
-  { id: "r12", restroom_key: "pd-10", user_id: "u12", user_name: "배수진", rating: 5, comment: "공원 화장실치고 정말 깨끗합니다.", has_photo: true, created_at: "2026-03-17" },
+  { id: "r1", restroom_id: "pd-1", user_id: "u1", user_name: "김민수", rating: 4, comment: "깨끗하고 관리가 잘 되어 있어요.", has_photo: true, created_at: "2026-03-18" },
+  { id: "r2", restroom_id: "pd-1", user_id: "u2", user_name: "이지은", rating: 5, comment: "장애인 화장실도 넓고 편리합니다.", has_photo: false, created_at: "2026-03-15" },
+  { id: "r3", restroom_id: "pd-1", user_id: "u3", user_name: "박준영", rating: 3, comment: "점심시간에는 좀 붐벼요.", has_photo: true, created_at: "2026-03-10" },
+  { id: "r4", restroom_id: "pd-8", user_id: "u4", user_name: "최수아", rating: 4, comment: "지하상가에서 찾기 쉬운 위치에 있어요.", has_photo: false, created_at: "2026-03-17" },
+  { id: "r5", restroom_id: "pd-8", user_id: "u5", user_name: "정우진", rating: 3, comment: "사람이 많아서 대기시간이 좀 있어요.", has_photo: true, created_at: "2026-03-12" },
+  { id: "r6", restroom_id: "pd-7", user_id: "u6", user_name: "한소희", rating: 5, comment: "역 안에서 접근이 편리해요.", has_photo: true, created_at: "2026-03-16" },
+  { id: "r7", restroom_id: "pd-7", user_id: "u7", user_name: "오세준", rating: 4, comment: "전반적으로 깨끗한 상태입니다.", has_photo: false, created_at: "2026-03-11" },
+  { id: "r8", restroom_id: "pd-9", user_id: "u8", user_name: "강하늘", rating: 2, comment: "금요일 밤에는 상태가 안 좋아요.", has_photo: true, created_at: "2026-03-14" },
+  { id: "r9", restroom_id: "pd-6", user_id: "u9", user_name: "윤서연", rating: 5, comment: "DDP 화장실은 항상 깨끗해요.", has_photo: true, created_at: "2026-03-18" },
+  { id: "r10", restroom_id: "pd-6", user_id: "u10", user_name: "임재현", rating: 5, comment: "서울에서 가장 깨끗한 공용화장실 중 하나.", has_photo: false, created_at: "2026-03-13" },
+  { id: "r11", restroom_id: "pd-12", user_id: "u11", user_name: "송민지", rating: 3, comment: "위치는 좋은데 관리 상태가 아쉬워요.", has_photo: false, created_at: "2026-03-09" },
+  { id: "r12", restroom_id: "pd-10", user_id: "u12", user_name: "배수진", rating: 5, comment: "공원 화장실치고 정말 깨끗합니다.", has_photo: true, created_at: "2026-03-17" },
 ];
