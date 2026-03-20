@@ -24,10 +24,10 @@ create table if not exists user_restrooms (
 );
 
 -- 2. 리뷰 (공공데이터/유저등록 화장실 모두 대상)
---    restroom_key: 공공데이터는 "pd-1" 형태, 유저등록은 uuid
+--    restroom_id: 공공데이터는 "pd-1" 형태, 유저등록은 uuid
 create table if not exists reviews (
   id uuid primary key default gen_random_uuid(),
-  restroom_key text not null,
+  restroom_id text not null,
   user_id uuid not null references auth.users(id) on delete cascade,
   user_name text not null,
   rating smallint not null check (rating >= 1 and rating <= 5),
@@ -38,19 +38,19 @@ create table if not exists reviews (
 );
 
 -- 3. 인덱스
-create index if not exists idx_reviews_restroom_key on reviews(restroom_key);
+create index if not exists idx_reviews_restroom_id on reviews(restroom_id);
 create index if not exists idx_reviews_user_id on reviews(user_id);
 create index if not exists idx_user_restrooms_location on user_restrooms(lat, lng);
 create index if not exists idx_user_restrooms_status on user_restrooms(status);
 
--- 4. 리뷰 집계 뷰 (restroom_key별 평균 평점/리뷰 수)
+-- 4. 리뷰 집계 뷰 (restroom_id별 평균 평점/리뷰 수)
 create or replace view review_stats as
 select
-  restroom_key,
+  restroom_id,
   coalesce(round(avg(rating)::numeric, 1), 0) as rating,
   count(*)::int as review_count
 from reviews
-group by restroom_key;
+group by restroom_id;
 
 -- 5. RLS (Row Level Security) 정책
 alter table user_restrooms enable row level security;

@@ -109,38 +109,28 @@ export async function createUserRestroom(restroom: {
 // === DB: 리뷰 ===
 
 /**
- * 특정 화장실의 리뷰 목록 (restroom_key 또는 restroom_id 호환)
+ * 특정 화장실의 리뷰 목록
  */
 export async function getReviewsByKey(restroomKey: string): Promise<Review[]> {
   try {
-    // 새 스키마 시도 (restroom_key)
     const { data, error } = await supabase
-      .from("reviews")
-      .select("*")
-      .eq("restroom_key", restroomKey)
-      .order("created_at", { ascending: false });
-
-    if (!error && data) return data as Review[];
-
-    // 옛 스키마 fallback (restroom_id)
-    const { data: oldData, error: oldError } = await supabase
       .from("reviews")
       .select("*")
       .eq("restroom_id", restroomKey)
       .order("created_at", { ascending: false });
 
-    if (oldError) return [];
-    return (oldData ?? []) as Review[];
+    if (error) return [];
+    return (data ?? []) as Review[];
   } catch {
     return [];
   }
 }
 
 /**
- * 리뷰 등록 (새 스키마 시도 → 옛 스키마 fallback)
+ * 리뷰 등록
  */
 export async function createReview(review: {
-  restroom_key: string;
+  restroom_id: string;
   user_id: string;
   user_name: string;
   rating: number;
@@ -148,25 +138,14 @@ export async function createReview(review: {
   has_photo?: boolean;
   photo_url?: string;
 }): Promise<Review> {
-  // 새 스키마 시도
   const { data, error } = await supabase
     .from("reviews")
     .insert(review)
     .select()
     .single();
 
-  if (!error && data) return data as Review;
-
-  // 옛 스키마 fallback (restroom_id)
-  const { restroom_key, ...rest } = review;
-  const { data: oldData, error: oldError } = await supabase
-    .from("reviews")
-    .insert({ ...rest, restroom_id: restroom_key })
-    .select()
-    .single();
-
-  if (oldError) throw oldError;
-  return oldData as Review;
+  if (error) throw error;
+  return data as Review;
 }
 
 /**

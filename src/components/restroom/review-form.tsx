@@ -31,7 +31,7 @@ export function ReviewForm({ restroomId, onSubmit }: ReviewFormProps) {
     try {
       if (user) {
         await createReview({
-          restroom_key: restroomId,
+          restroom_id: restroomId,
           user_id: user.id,
           user_name: user.user_metadata?.user_name || user.email || "익명",
           rating,
