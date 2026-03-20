@@ -19,10 +19,10 @@ const FACILITY_OPTIONS = [
 const TAG_OPTIONS = ["무료", "24시간", "깨끗함", "장애인 접근 가능", "비데", "기저귀 교환대"];
 
 const GENDER_OPTIONS = [
-  { value: "mixed", label: "남녀공용" },
   { value: "separated", label: "남녀분리" },
-  { value: "male_only", label: "남자전용" },
-  { value: "female_only", label: "여자전용" },
+  { value: "mixed", label: "남녀공용" },
+  { value: "male_only", label: "남자화장실" },
+  { value: "female_only", label: "여자화장실" },
 ] as const;
 
 type FacilityKey = (typeof FACILITY_OPTIONS)[number]["key"];
@@ -45,7 +45,7 @@ export default function NewRestroomPage() {
   });
   const [isFree, setIsFree] = useState(true);
   const [openHours, setOpenHours] = useState("");
-  const [genderType, setGenderType] = useState<GenderType>("mixed");
+  const [genderType, setGenderType] = useState<GenderType>("separated");
   const [maleStalls, setMaleStalls] = useState("");
   const [femaleStalls, setFemaleStalls] = useState("");
   const [photos, setPhotos] = useState<{ file: File; preview: string }[]>([]);
@@ -53,29 +53,57 @@ export default function NewRestroomPage() {
   const [submitted, setSubmitted] = useState(false);
   const [useCurrentLocation, setUseCurrentLocation] = useState(false);
 
+  // 좌표 → 주소 변환 (Kakao SDK 있으면 사용, 없으면 Nominatim fallback)
+  const reverseGeocode = useCallback(async (latitude: number, longitude: number) => {
+    // 1) Kakao Maps SDK (이미 로드된 경우)
+    if (window.kakao?.maps?.services) {
+      const geocoder = new window.kakao.maps.services.Geocoder();
+      geocoder.coord2Address(longitude, latitude, (result, status) => {
+        if (status === window.kakao.maps.services.Status.OK && result[0]) {
+          const addr = result[0].road_address?.address_name || result[0].address.address_name;
+          setAddress(addr);
+        }
+      });
+      return;
+    }
+
+    // 2) Nominatim (OpenStreetMap) 무료 역지오코딩
+    try {
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&accept-language=ko`
+      );
+      if (res.ok) {
+        const data = await res.json();
+        if (data.display_name) {
+          // "대한민국" 접두사 제거, 우편번호 제거
+          const addr = data.display_name
+            .replace(/대한민국,?\s*/g, "")
+            .replace(/\d{5},?\s*/g, "")
+            .trim();
+          setAddress(addr);
+        }
+      }
+    } catch {
+      // 역지오코딩 실패해도 좌표는 이미 설정됨
+    }
+  }, []);
+
   // 현재 위치 가져오기
   const handleUseCurrentLocation = useCallback(() => {
     if (!navigator.geolocation) return;
     setUseCurrentLocation(true);
     navigator.geolocation.getCurrentPosition(
       (pos) => {
-        setLat(pos.coords.latitude);
-        setLng(pos.coords.longitude);
-        if (window.kakao?.maps?.services) {
-          const geocoder = new window.kakao.maps.services.Geocoder();
-          geocoder.coord2Address(pos.coords.longitude, pos.coords.latitude, (result, status) => {
-            if (status === window.kakao.maps.services.Status.OK && result[0]) {
-              const addr = result[0].road_address?.address_name || result[0].address.address_name;
-              setAddress(addr);
-            }
-          });
-        }
+        const { latitude, longitude } = pos.coords;
+        setLat(latitude);
+        setLng(longitude);
+        reverseGeocode(latitude, longitude);
         setUseCurrentLocation(false);
       },
       () => setUseCurrentLocation(false),
       { enableHighAccuracy: true, timeout: 10000 }
     );
-  }, []);
+  }, [reverseGeocode]);
 
   const toggleTag = (tag: string) => {
     setSelectedTags((prev) =>
