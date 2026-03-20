@@ -31,14 +31,17 @@ There is no test framework configured yet.
 ```
 src/
 ├── app/                        # Next.js App Router pages
-│   ├── layout.tsx              # Root layout (AuthProvider + MobileShell)
-│   ├── page.tsx                # Home — map + nearby restrooms (geolocation)
+│   ├── layout.tsx              # Root layout (AuthProvider + MobileShell + SW)
+│   ├── page.tsx                # Home — map + nearby restrooms (lazy bounds load)
 │   ├── globals.css             # Global styles + Tailwind + CSS variables
+│   ├── admin/page.tsx          # Admin — approve/reject registrations & edits
 │   ├── search/page.tsx         # Search with debounced API + filters
 │   ├── profile/page.tsx        # Login form or user profile + my reviews
-│   └── restroom/[id]/
-│       ├── page.tsx            # Restroom detail (API + mock fallback)
-│       └── review/page.tsx     # Write review (auth required)
+│   └── restroom/
+│       ├── new/page.tsx        # Register restroom (7-step wizard)
+│       └── [id]/
+│           ├── page.tsx        # Restroom detail + safety check + edit request
+│           └── review/page.tsx # Write review (auth required)
 ├── components/
 │   ├── ui/                     # shadcn/ui primitives (button, card, input, etc.)
 │   ├── auth/
@@ -53,18 +56,25 @@ src/
 │       ├── review-card.tsx     # Single review display
 │       ├── star-rating.tsx     # Interactive star rating
 │       ├── photo-grid.tsx      # Photo gallery placeholder
-│       ├── map-view.tsx        # Kakao Maps with markers
+│       ├── map-view.tsx        # Kakao Maps with markers + user location
 │       └── map-placeholder.tsx # Fallback when no map API key
 ├── lib/
-│   ├── types.ts                # Restroom, Review interfaces (snake_case fields)
-│   ├── api.ts                  # Supabase data access (CRUD)
+│   ├── types.ts                # Restroom, Review, EditRequest interfaces
+│   ├── api.ts                  # Supabase data access + admin + safety
 │   ├── auth.ts                 # signUp, signIn, signOut, getUser
-│   ├── mock-data.ts            # Mock data fallback (7 restrooms, 12 reviews)
-│   ├── seed.ts                 # DB seed script (npx tsx src/lib/seed.ts)
+│   ├── mock-data.ts            # Mock data fallback (legacy)
 │   ├── supabase.ts             # Supabase client (lazy init for build safety)
 │   └── utils.ts                # cn(), getDistanceMeters(), formatDistance()
+├── public/
+│   ├── data/public-restrooms.json  # 공공 화장실 정적 데이터 (6,966건)
+│   ├── manifest.json           # PWA manifest
+│   ├── sw.js                   # Service worker
+│   └── icons/                  # App icons (192, 512)
+├── scripts/
+│   └── convert-csv.ts          # 공공데이터 CSV → JSON 변환
 └── supabase/
-    └── schema.sql              # DB tables, views, indexes, RLS policies
+    ├── schema.sql              # Full DB schema
+    └── migrations/             # Incremental migrations (001~003)
 ```
 
 ## Key Conventions
@@ -81,7 +91,8 @@ src/
 - shadcn/ui components use `class-variance-authority` for variants
 - Use `cn()` from `@/lib/utils` for conditional className merging
 - Prefer named exports over default exports
-- API calls use try/catch with mock data fallback
+- DB 의존 기능(관리자, 리뷰, 안전확인 등)은 Supabase 직접 호출. localStorage fallback 사용 금지 — DB 연결 실패 시 에러를 표시할 것
+- 공공 화장실 데이터는 정적 JSON (`public/data/public-restrooms.json`)에서 로드, 홈 페이지 조회에만 mock fallback 허용
 
 ### Styling
 - Tailwind CSS utility classes exclusively — no CSS modules or styled-components
@@ -114,16 +125,17 @@ Run `supabase/schema.sql` in Supabase SQL Editor to create:
 
 | Path | Description |
 |------|-------------|
-| `/` | Home — map + nearby restrooms (sorted by distance if geolocation available) |
+| `/` | Home — map + nearby restrooms (lazy bounds-based load) |
 | `/search` | Search with name/address query + tag filters |
-| `/profile` | Login/signup form or user profile with review history |
-| `/restroom/[id]` | Restroom detail with reviews |
-| `/restroom/[id]/review` | Write a review (login required) |
+| `/profile` | Login/signup form or user profile + review history |
+| `/admin` | Admin — pending registrations & edit requests |
+| `/restroom/new` | Register restroom (7-step wizard, auth required) |
+| `/restroom/[id]` | Restroom detail + safety check + edit request |
+| `/restroom/[id]/review` | Write a review (auth required) |
 
-## Current Status
+## Architecture Notes
 
-- Supabase schema, API layer, and auth fully wired
-- All pages fall back to mock data when Supabase is not connected
-- Kakao Map integration (falls back to placeholder without API key)
-- No tests, no CI/CD pipeline
-- Photo upload not yet implemented (placeholder only)
+- **공공 화장실 데이터**: 정적 JSON (public/data/) — 지도 bounds 확정 후 lazy load, bounds 내 최대 50개 마커 + 20개 리스트
+- **유저 등록 화장실/리뷰/안전확인**: Supabase DB 직접 사용. localStorage fallback 절대 금지
+- **PWA**: manifest.json + service worker로 홈 화면 설치 지원
+- **지도**: Kakao Maps SDK, 내 위치 파란 점 마커, idle 디바운스 300ms

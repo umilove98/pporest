@@ -28,15 +28,22 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true);
   const [processing, setProcessing] = useState<string | null>(null);
 
+  const [error, setError] = useState<string | null>(null);
+
   useEffect(() => {
     async function load() {
-      const [restrooms, edits] = await Promise.all([
-        getPendingRestrooms(),
-        getPendingEditRequests(),
-      ]);
-      setPendingRestrooms(restrooms);
-      setPendingEdits(edits);
-      setLoading(false);
+      try {
+        const [restrooms, edits] = await Promise.all([
+          getPendingRestrooms(),
+          getPendingEditRequests(),
+        ]);
+        setPendingRestrooms(restrooms);
+        setPendingEdits(edits);
+      } catch {
+        setError("Supabase 연결이 필요합니다. .env.local에 Supabase 설정을 확인해주세요.");
+      } finally {
+        setLoading(false);
+      }
     }
     load();
   }, []);
@@ -119,6 +126,8 @@ export default function AdminPage() {
       <div className="px-4 py-4">
         {loading ? (
           <p className="py-8 text-center text-sm text-muted-foreground">로딩 중...</p>
+        ) : error ? (
+          <p className="py-8 text-center text-sm text-red-500">{error}</p>
         ) : tab === "restrooms" ? (
           /* 등록 요청 목록 */
           pendingRestrooms.length === 0 ? (
