@@ -8,6 +8,12 @@ export interface PublicRestroom {
   disabled: boolean;   // 장애인 화장실 여부
   diaper: boolean;     // 기저귀 교환대 여부
   hours: string | null; // 개방시간
+  male_toilet: number;  // 남성용 대변기 수
+  male_urinal: number;  // 남성용 소변기 수
+  female_toilet: number; // 여성용 대변기 수
+  emergency_bell: boolean; // 비상벨 설치 여부
+  cctv: boolean;        // 입구 CCTV 설치 여부
+  data_date: string | null; // 데이터 기준일자
 }
 
 /** 유저가 등록한 화장실 (DB 저장) */
@@ -63,6 +69,12 @@ export interface Restroom {
   is_free: boolean;
   open_hours: string | null;
   gender_type?: "mixed" | "separated" | "male_only" | "female_only";
+  male_toilet?: number;
+  male_urinal?: number;
+  female_toilet?: number;
+  emergency_bell?: boolean;
+  cctv?: boolean;
+  data_date?: string | null;
   male_stalls?: number | null;
   female_stalls?: number | null;
   photo_urls?: string[];
