@@ -301,7 +301,11 @@ export default function RestroomDetailPage() {
                             onClick={() => {
                               setEditField(key);
                               const val = restroom[key as keyof Restroom];
-                              setEditCurrentValue(val != null ? String(val) : "");
+                              if (typeof val === "boolean") {
+                                setEditCurrentValue(val ? "예" : "아니오");
+                              } else {
+                                setEditCurrentValue(val != null ? String(val) : "");
+                              }
                             }}
                           >
                             {label}
