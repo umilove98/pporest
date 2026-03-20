@@ -3,7 +3,7 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Script from "next/script";
-import { ArrowLeft, MapPin, CheckCircle, Loader2, Camera, X } from "lucide-react";
+import { ArrowLeft, MapPin, CheckCircle, Loader2, Camera, X, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -29,11 +29,22 @@ const GENDER_OPTIONS = [
 type FacilityKey = (typeof FACILITY_OPTIONS)[number]["key"];
 type GenderType = (typeof GENDER_OPTIONS)[number]["value"];
 
+const STEPS = [
+  { id: "basic", title: "기본 정보", required: true },
+  { id: "gender", title: "화장실 구분", required: true },
+  { id: "stalls", title: "칸 수 정보", required: false },
+  { id: "hours", title: "운영 정보", required: false },
+  { id: "facilities", title: "시설 & 태그", required: false },
+  { id: "photos", title: "사진 첨부", required: false },
+  { id: "confirm", title: "확인", required: true },
+] as const;
+
 export default function NewRestroomPage() {
   const router = useRouter();
   const { user } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const [step, setStep] = useState(0);
   const [name, setName] = useState("");
   const [address, setAddress] = useState("");
   const [lat, setLat] = useState<number | null>(null);
@@ -54,23 +65,19 @@ export default function NewRestroomPage() {
   const [submitted, setSubmitted] = useState(false);
   const [useCurrentLocation, setUseCurrentLocation] = useState(false);
   const [kakaoReady, setKakaoReady] = useState(false);
-  // 좌표를 먼저 받고, SDK 로드 후 역지오코딩 실행
   const pendingCoords = useRef<{ lat: number; lng: number } | null>(null);
 
   const KAKAO_API_KEY = process.env.NEXT_PUBLIC_KAKAO_MAP_API_KEY;
+  const currentStep = STEPS[step];
 
-  // 이미 Kakao SDK 로드된 경우 (홈에서 이동 등)
   useEffect(() => {
-    if (window.kakao?.maps?.services) {
-      setKakaoReady(true);
-    }
+    if (window.kakao?.maps?.services) setKakaoReady(true);
   }, []);
 
   const handleKakaoLoad = useCallback(() => {
     if (window.kakao?.maps) {
       window.kakao.maps.load(() => {
         setKakaoReady(true);
-        // SDK 로드 완료 후, 대기 중이던 좌표가 있으면 역지오코딩 실행
         if (pendingCoords.current) {
           const { lat: pLat, lng: pLng } = pendingCoords.current;
           pendingCoords.current = null;
@@ -91,7 +98,6 @@ export default function NewRestroomPage() {
     });
   };
 
-  // 현재 위치 가져오기
   const handleUseCurrentLocation = useCallback(() => {
     if (!navigator.geolocation) return;
     setUseCurrentLocation(true);
@@ -103,7 +109,6 @@ export default function NewRestroomPage() {
         if (kakaoReady) {
           doReverseGeocode(latitude, longitude);
         } else {
-          // SDK 아직 안 로드됨 → 좌표 저장해두고 로드 완료 시 실행
           pendingCoords.current = { lat: latitude, lng: longitude };
         }
         setUseCurrentLocation(false);
@@ -146,7 +151,6 @@ export default function NewRestroomPage() {
 
     setSubmitting(true);
     try {
-      // 사진은 base64로 localStorage에 저장 (Supabase Storage 미연결 시)
       const photoUrls: string[] = [];
       for (const photo of photos) {
         const base64 = await fileToBase64(photo.file);
@@ -178,7 +182,20 @@ export default function NewRestroomPage() {
     }
   };
 
-  // 미로그인 상태
+  const canProceed = () => {
+    if (currentStep.id === "basic") {
+      return name.trim() && address.trim() && lat !== null && lng !== null;
+    }
+    return true;
+  };
+
+  const goNext = () => setStep((s) => Math.min(s + 1, STEPS.length - 1));
+  const goBack = () => {
+    if (step === 0) router.back();
+    else setStep((s) => s - 1);
+  };
+
+  // 미로그인
   if (!user) {
     return (
       <div className="flex flex-col">
@@ -190,9 +207,7 @@ export default function NewRestroomPage() {
         </header>
         <div className="flex flex-col items-center gap-4 px-4 py-16 text-center">
           <MapPin className="h-12 w-12 text-muted-foreground" />
-          <p className="text-sm text-muted-foreground">
-            화장실을 등록하려면 로그인이 필요합니다.
-          </p>
+          <p className="text-sm text-muted-foreground">화장실을 등록하려면 로그인이 필요합니다.</p>
           <Button onClick={() => router.push("/profile")} className="bg-emerald-500 hover:bg-emerald-600">
             로그인하기
           </Button>
@@ -226,11 +241,10 @@ export default function NewRestroomPage() {
     );
   }
 
-  const isValid = name.trim() && address.trim() && lat !== null && lng !== null;
+  const genderLabel = GENDER_OPTIONS.find((g) => g.value === genderType)?.label ?? "";
 
   return (
-    <div className="flex flex-col">
-      {/* Kakao SDK 로드 (역지오코딩용 — 이미 로드된 경우 중복 로드 안 함) */}
+    <div className="flex flex-col min-h-screen">
       {KAKAO_API_KEY && !kakaoReady && (
         <Script
           src={`//dapi.kakao.com/v2/maps/sdk.js?appkey=${KAKAO_API_KEY}&libraries=services&autoload=false`}
@@ -238,73 +252,89 @@ export default function NewRestroomPage() {
         />
       )}
 
+      {/* Header */}
       <header className="sticky top-0 z-40 flex items-center gap-3 border-b bg-background px-4 py-3">
-        <button onClick={() => router.back()}>
+        <button onClick={goBack}>
           <ArrowLeft className="h-5 w-5" />
         </button>
         <h1 className="text-base font-semibold">화장실 등록</h1>
+        <span className="ml-auto text-xs text-muted-foreground">{step + 1} / {STEPS.length}</span>
       </header>
 
-      <div className="flex flex-col gap-5 px-4 py-4">
-        {/* 기본 정보 */}
-        <section className="flex flex-col gap-3">
-          <h2 className="text-sm font-semibold">기본 정보</h2>
+      {/* Progress bar */}
+      <div className="h-1 bg-muted">
+        <div
+          className="h-full bg-emerald-500 transition-all duration-300"
+          style={{ width: `${((step + 1) / STEPS.length) * 100}%` }}
+        />
+      </div>
 
-          <div className="flex flex-col gap-1.5">
-            <label className="text-xs text-muted-foreground">화장실 이름 *</label>
-            <Input
-              placeholder="예: OO공원 공중화장실"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-            />
-          </div>
+      {/* Step content */}
+      <div className="flex-1 px-4 py-6">
+        <h2 className="mb-1 text-lg font-semibold">{currentStep.title}</h2>
+        {!currentStep.required && (
+          <p className="mb-4 text-xs text-muted-foreground">선택사항 — 건너뛸 수 있습니다</p>
+        )}
 
-          <div className="flex flex-col gap-1.5">
-            <label className="text-xs text-muted-foreground">주소 *</label>
-            <Input
-              placeholder="예: 서울 강남구 테헤란로 123"
-              value={address}
-              onChange={(e) => setAddress(e.target.value)}
-            />
-          </div>
+        {/* Step 1: 기본 정보 */}
+        {currentStep.id === "basic" && (
+          <div className="flex flex-col gap-4 mt-4">
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium">화장실 이름 *</label>
+              <Input
+                placeholder="예: OO공원 공중화장실"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                autoFocus
+              />
+            </div>
 
-          <div className="flex flex-col gap-1.5">
-            <label className="text-xs text-muted-foreground">위치 좌표 *</label>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleUseCurrentLocation}
-              disabled={useCurrentLocation}
-              className="w-full justify-start gap-2"
-            >
-              {useCurrentLocation ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <MapPin className="h-4 w-4" />
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium">위치 좌표 *</label>
+              <Button
+                variant="outline"
+                onClick={handleUseCurrentLocation}
+                disabled={useCurrentLocation}
+                className="w-full justify-start gap-2"
+              >
+                {useCurrentLocation ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <MapPin className="h-4 w-4" />
+                )}
+                {lat !== null
+                  ? `${lat.toFixed(4)}, ${lng!.toFixed(4)}`
+                  : "현재 위치로 설정하기"}
+              </Button>
+              {lat !== null && (
+                <p className="text-xs text-emerald-600">위치가 설정되었습니다</p>
               )}
-              {lat !== null
-                ? `${lat.toFixed(4)}, ${lng!.toFixed(4)}`
-                : "현재 위치로 설정하기"}
-            </Button>
-            {lat !== null && (
-              <p className="text-xs text-muted-foreground">
-                위치가 설정되었습니다. 화장실 위치에서 등록해주세요.
-              </p>
-            )}
-          </div>
-        </section>
+            </div>
 
-        {/* 화장실 구분 */}
-        <section className="flex flex-col gap-3">
-          <h2 className="text-sm font-semibold">화장실 구분</h2>
-          <div className="grid grid-cols-2 gap-2">
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium">주소 *</label>
+              <Input
+                placeholder="예: 서울 강남구 테헤란로 123"
+                value={address}
+                onChange={(e) => setAddress(e.target.value)}
+              />
+              {lat !== null && !address && (
+                <p className="text-xs text-muted-foreground">위치 설정 시 자동으로 채워집니다</p>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Step 2: 화장실 구분 */}
+        {currentStep.id === "gender" && (
+          <div className="grid grid-cols-2 gap-3 mt-4">
             {GENDER_OPTIONS.map(({ value, label }) => (
               <button
                 key={value}
                 onClick={() => setGenderType(value)}
-                className={`rounded-lg border px-3 py-2.5 text-sm transition-colors ${
+                className={`rounded-xl border-2 px-4 py-4 text-sm transition-all ${
                   genderType === value
-                    ? "border-emerald-500 bg-emerald-50 font-medium text-emerald-700"
+                    ? "border-emerald-500 bg-emerald-50 font-semibold text-emerald-700 shadow-sm"
                     : "border-muted hover:bg-muted/50"
                 }`}
               >
@@ -312,177 +342,252 @@ export default function NewRestroomPage() {
               </button>
             ))}
           </div>
-        </section>
+        )}
 
-        {/* 칸 수 정보 */}
-        <section className="flex flex-col gap-3">
-          <h2 className="text-sm font-semibold">칸 수 정보</h2>
-          <Card>
-            <CardContent className="flex flex-col gap-3 p-3">
-              {(genderType === "mixed" || genderType === "separated" || genderType === "male_only") && (
-                <div className="flex items-center gap-3">
-                  <label className="w-20 text-sm text-muted-foreground">남자 화장실</label>
-                  <Input
-                    type="number"
-                    min="0"
-                    placeholder="칸 수"
-                    value={maleStalls}
-                    onChange={(e) => setMaleStalls(e.target.value)}
-                    className="w-24"
-                  />
-                  <span className="text-xs text-muted-foreground">칸</span>
-                </div>
-              )}
-              {(genderType === "mixed" || genderType === "separated" || genderType === "female_only") && (
-                <div className="flex items-center gap-3">
-                  <label className="w-20 text-sm text-muted-foreground">여자 화장실</label>
-                  <Input
-                    type="number"
-                    min="0"
-                    placeholder="칸 수"
-                    value={femaleStalls}
-                    onChange={(e) => setFemaleStalls(e.target.value)}
-                    className="w-24"
-                  />
-                  <span className="text-xs text-muted-foreground">칸</span>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </section>
-
-        {/* 운영 정보 */}
-        <section className="flex flex-col gap-3">
-          <h2 className="text-sm font-semibold">운영 정보</h2>
-
-          <div className="flex flex-col gap-1.5">
-            <label className="text-xs text-muted-foreground">운영 시간</label>
-            <Input
-              placeholder="예: 24시간, 06:00-22:00"
-              value={openHours}
-              onChange={(e) => setOpenHours(e.target.value)}
-            />
+        {/* Step 3: 칸 수 */}
+        {currentStep.id === "stalls" && (
+          <div className="flex flex-col gap-4 mt-4">
+            {(genderType === "mixed" || genderType === "separated" || genderType === "male_only") && (
+              <div className="flex items-center gap-3">
+                <label className="w-24 text-sm">남자 화장실</label>
+                <Input
+                  type="number"
+                  min="0"
+                  placeholder="칸 수"
+                  value={maleStalls}
+                  onChange={(e) => setMaleStalls(e.target.value)}
+                  className="w-24"
+                />
+                <span className="text-sm text-muted-foreground">칸</span>
+              </div>
+            )}
+            {(genderType === "mixed" || genderType === "separated" || genderType === "female_only") && (
+              <div className="flex items-center gap-3">
+                <label className="w-24 text-sm">여자 화장실</label>
+                <Input
+                  type="number"
+                  min="0"
+                  placeholder="칸 수"
+                  value={femaleStalls}
+                  onChange={(e) => setFemaleStalls(e.target.value)}
+                  className="w-24"
+                />
+                <span className="text-sm text-muted-foreground">칸</span>
+              </div>
+            )}
           </div>
+        )}
 
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setIsFree(!isFree)}
-              className={`flex h-5 w-5 items-center justify-center rounded border ${
-                isFree ? "border-emerald-500 bg-emerald-500 text-white" : "border-muted-foreground"
-              }`}
-            >
-              {isFree && <CheckCircle className="h-3.5 w-3.5" />}
-            </button>
-            <span className="text-sm">무료 화장실</span>
+        {/* Step 4: 운영 정보 */}
+        {currentStep.id === "hours" && (
+          <div className="flex flex-col gap-4 mt-4">
+            <div className="flex flex-col gap-1.5">
+              <label className="text-sm font-medium">운영 시간</label>
+              <Input
+                placeholder="예: 24시간, 06:00-22:00"
+                value={openHours}
+                onChange={(e) => setOpenHours(e.target.value)}
+                autoFocus
+              />
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setIsFree(!isFree)}
+                className={`flex h-6 w-6 items-center justify-center rounded border-2 ${
+                  isFree ? "border-emerald-500 bg-emerald-500 text-white" : "border-muted-foreground"
+                }`}
+              >
+                {isFree && <CheckCircle className="h-4 w-4" />}
+              </button>
+              <span className="text-sm">무료 화장실</span>
+            </div>
           </div>
-        </section>
+        )}
 
-        {/* 시설 정보 */}
-        <section className="flex flex-col gap-3">
-          <h2 className="text-sm font-semibold">시설 정보</h2>
-          <Card>
-            <CardContent className="flex flex-col gap-3 p-3">
+        {/* Step 5: 시설 & 태그 */}
+        {currentStep.id === "facilities" && (
+          <div className="flex flex-col gap-5 mt-4">
+            <div className="flex flex-col gap-3">
+              <label className="text-sm font-medium">시설 정보</label>
               {FACILITY_OPTIONS.map(({ key, label }) => (
                 <div key={key} className="flex items-center gap-2">
                   <button
                     onClick={() => toggleFacility(key)}
-                    className={`flex h-5 w-5 items-center justify-center rounded border ${
+                    className={`flex h-6 w-6 items-center justify-center rounded border-2 ${
                       facilities[key]
                         ? "border-emerald-500 bg-emerald-500 text-white"
                         : "border-muted-foreground"
                     }`}
                   >
-                    {facilities[key] && <CheckCircle className="h-3.5 w-3.5" />}
+                    {facilities[key] && <CheckCircle className="h-4 w-4" />}
                   </button>
                   <span className="text-sm">{label}</span>
                 </div>
               ))}
-            </CardContent>
-          </Card>
-        </section>
+            </div>
 
-        {/* 사진 첨부 */}
-        <section className="flex flex-col gap-3">
-          <h2 className="text-sm font-semibold">사진 첨부 (최대 5장)</h2>
-          <div className="flex flex-wrap gap-2">
-            {photos.map((photo, i) => (
-              <div key={i} className="relative h-20 w-20 overflow-hidden rounded-lg border">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={photo.preview} alt={`사진 ${i + 1}`} className="h-full w-full object-cover" />
-                <button
-                  onClick={() => removePhoto(i)}
-                  className="absolute right-0.5 top-0.5 rounded-full bg-black/60 p-0.5 text-white"
-                >
-                  <X className="h-3 w-3" />
-                </button>
+            <div className="flex flex-col gap-2">
+              <label className="text-sm font-medium">태그</label>
+              <div className="flex flex-wrap gap-2">
+                {TAG_OPTIONS.map((tag) => (
+                  <Badge
+                    key={tag}
+                    variant={selectedTags.includes(tag) ? "default" : "outline"}
+                    className={`cursor-pointer text-sm px-3 py-1 ${
+                      selectedTags.includes(tag)
+                        ? "bg-emerald-500 hover:bg-emerald-600"
+                        : "hover:bg-muted"
+                    }`}
+                    onClick={() => toggleTag(tag)}
+                  >
+                    {tag}
+                  </Badge>
+                ))}
               </div>
-            ))}
-            {photos.length < 5 && (
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                className="flex h-20 w-20 flex-col items-center justify-center gap-1 rounded-lg border-2 border-dashed border-muted-foreground/30 text-muted-foreground hover:border-emerald-400 hover:text-emerald-500"
-              >
-                <Camera className="h-5 w-5" />
-                <span className="text-[10px]">추가</span>
-              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Step 6: 사진 */}
+        {currentStep.id === "photos" && (
+          <div className="flex flex-col gap-3 mt-4">
+            <p className="text-sm text-muted-foreground">최대 5장까지 첨부할 수 있습니다</p>
+            <div className="flex flex-wrap gap-2">
+              {photos.map((photo, i) => (
+                <div key={i} className="relative h-24 w-24 overflow-hidden rounded-xl border">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={photo.preview} alt={`사진 ${i + 1}`} className="h-full w-full object-cover" />
+                  <button
+                    onClick={() => removePhoto(i)}
+                    className="absolute right-1 top-1 rounded-full bg-black/60 p-1 text-white"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              ))}
+              {photos.length < 5 && (
+                <button
+                  onClick={() => fileInputRef.current?.click()}
+                  className="flex h-24 w-24 flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed border-muted-foreground/30 text-muted-foreground hover:border-emerald-400 hover:text-emerald-500"
+                >
+                  <Camera className="h-6 w-6" />
+                  <span className="text-xs">추가</span>
+                </button>
+              )}
+            </div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              onChange={handlePhotoAdd}
+              className="hidden"
+            />
+          </div>
+        )}
+
+        {/* Step 7: 확인 */}
+        {currentStep.id === "confirm" && (
+          <div className="flex flex-col gap-3 mt-4">
+            <Card>
+              <CardContent className="flex flex-col gap-2.5 p-4">
+                <div className="flex justify-between">
+                  <span className="text-xs text-muted-foreground">이름</span>
+                  <span className="text-sm font-medium">{name}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-xs text-muted-foreground">주소</span>
+                  <span className="text-sm text-right max-w-[60%]">{address}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-xs text-muted-foreground">구분</span>
+                  <span className="text-sm">{genderLabel}</span>
+                </div>
+                {(maleStalls || femaleStalls) && (
+                  <div className="flex justify-between">
+                    <span className="text-xs text-muted-foreground">칸 수</span>
+                    <span className="text-sm">
+                      {maleStalls ? `남 ${maleStalls}칸` : ""}
+                      {maleStalls && femaleStalls ? " / " : ""}
+                      {femaleStalls ? `여 ${femaleStalls}칸` : ""}
+                    </span>
+                  </div>
+                )}
+                {openHours && (
+                  <div className="flex justify-between">
+                    <span className="text-xs text-muted-foreground">운영시간</span>
+                    <span className="text-sm">{openHours}</span>
+                  </div>
+                )}
+                <div className="flex justify-between">
+                  <span className="text-xs text-muted-foreground">요금</span>
+                  <span className="text-sm">{isFree ? "무료" : "유료"}</span>
+                </div>
+                {selectedTags.length > 0 && (
+                  <div className="flex justify-between items-start">
+                    <span className="text-xs text-muted-foreground pt-0.5">태그</span>
+                    <div className="flex flex-wrap justify-end gap-1 max-w-[60%]">
+                      {selectedTags.map((tag) => (
+                        <Badge key={tag} variant="secondary" className="text-xs">{tag}</Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {photos.length > 0 && (
+                  <div className="flex justify-between">
+                    <span className="text-xs text-muted-foreground">사진</span>
+                    <span className="text-sm">{photos.length}장</span>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card className="border-amber-200 bg-amber-50">
+              <CardContent className="p-3">
+                <p className="text-xs text-amber-800">
+                  등록된 화장실은 관리자 검토 후 지도에 공개됩니다.
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+      </div>
+
+      {/* Bottom buttons */}
+      <div className="sticky bottom-16 border-t bg-background px-4 py-3">
+        {currentStep.id === "confirm" ? (
+          <Button
+            onClick={handleSubmit}
+            disabled={submitting}
+            className="w-full bg-emerald-500 hover:bg-emerald-600"
+          >
+            {submitting ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                등록 중...
+              </>
+            ) : (
+              "화장실 등록 요청"
             )}
+          </Button>
+        ) : (
+          <div className="flex gap-2">
+            {!currentStep.required && (
+              <Button variant="ghost" className="flex-1" onClick={goNext}>
+                건너뛰기
+              </Button>
+            )}
+            <Button
+              onClick={goNext}
+              disabled={!canProceed()}
+              className={`bg-emerald-500 hover:bg-emerald-600 gap-1 ${currentStep.required ? "flex-1" : "flex-1"}`}
+            >
+              다음
+              <ChevronRight className="h-4 w-4" />
+            </Button>
           </div>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            multiple
-            onChange={handlePhotoAdd}
-            className="hidden"
-          />
-        </section>
-
-        {/* 태그 */}
-        <section className="flex flex-col gap-3">
-          <h2 className="text-sm font-semibold">태그 선택</h2>
-          <div className="flex flex-wrap gap-2">
-            {TAG_OPTIONS.map((tag) => (
-              <Badge
-                key={tag}
-                variant={selectedTags.includes(tag) ? "default" : "outline"}
-                className={`cursor-pointer ${
-                  selectedTags.includes(tag)
-                    ? "bg-emerald-500 hover:bg-emerald-600"
-                    : "hover:bg-muted"
-                }`}
-                onClick={() => toggleTag(tag)}
-              >
-                {tag}
-              </Badge>
-            ))}
-          </div>
-        </section>
-
-        {/* 안내 */}
-        <Card className="border-amber-200 bg-amber-50">
-          <CardContent className="p-3">
-            <p className="text-xs text-amber-800">
-              등록된 화장실은 관리자 검토 후 지도에 공개됩니다.
-              허위 정보 등록 시 계정이 제한될 수 있습니다.
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* 제출 */}
-        <Button
-          onClick={handleSubmit}
-          disabled={!isValid || submitting}
-          className="w-full bg-emerald-500 hover:bg-emerald-600"
-        >
-          {submitting ? (
-            <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              등록 중...
-            </>
-          ) : (
-            "화장실 등록 요청"
-          )}
-        </Button>
+        )}
       </div>
     </div>
   );
