@@ -29,6 +29,7 @@ create index if not exists idx_public_restrooms_diaper on public_restrooms(diape
 
 alter table public_restrooms enable row level security;
 create policy "public_restrooms_select" on public_restrooms for select using (true);
+grant select on public_restrooms to anon, authenticated;
 
 -- 0-2. 관리자 테이블
 create table if not exists admin_users (

@@ -35,3 +35,6 @@ alter table public_restrooms enable row level security;
 
 create policy "public_restrooms_select" on public_restrooms
   for select using (true);
+
+-- anon/authenticated 역할에 SELECT 권한 부여
+grant select on public_restrooms to anon, authenticated;
