@@ -5,11 +5,11 @@ import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { RestroomCard } from "@/components/restroom/restroom-card";
-import { searchRestrooms } from "@/lib/api";
+import { loadPublicRestrooms, searchPublicRestrooms, toRestroom } from "@/lib/api";
 import { mockRestrooms } from "@/lib/mock-data";
 import { Restroom } from "@/lib/types";
 
-const filters = ["영업중", "장애인 접근 가능", "무료", "기저귀 교환대", "비데", "24시간"];
+const filters = ["장애인 접근 가능", "기저귀 교환대", "24시간"];
 
 export default function SearchPage() {
   const [query, setQuery] = useState("");
@@ -26,18 +26,16 @@ export default function SearchPage() {
   const doSearch = useCallback(async () => {
     setLoading(true);
     try {
-      const results = await searchRestrooms(query, activeFilters);
-      setRestrooms(results);
+      const publicData = await loadPublicRestrooms();
+      const filtered = searchPublicRestrooms(publicData, query, activeFilters);
+      setRestrooms(filtered.map((p) => toRestroom(p)));
     } catch {
-      // Supabase 미연결 시 mock 데이터 로컬 필터링
+      // 로드 실패 시 mock 데이터 로컬 필터링
       const filtered = mockRestrooms.filter((r) => {
         const matchesQuery = query === "" || r.name.includes(query) || r.address.includes(query);
         const matchesFilters =
           activeFilters.length === 0 ||
-          activeFilters.every((f) => {
-            if (f === "영업중") return r.is_open;
-            return r.tags.includes(f);
-          });
+          activeFilters.every((f) => r.tags.includes(f));
         return matchesQuery && matchesFilters;
       });
       setRestrooms(filtered);

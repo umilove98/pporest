@@ -138,3 +138,6 @@ dist
 # Vite logs files
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+# Public data CSV (large files, download separately)
+data/*.csv

@@ -3,14 +3,14 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { ChevronLeft, MapPin, Clock } from "lucide-react";
+import { ChevronLeft, MapPin, Clock, Accessibility, Baby, Droplets, Banknote } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { StarRating } from "@/components/restroom/star-rating";
 import { PhotoGrid } from "@/components/restroom/photo-grid";
 import { ReviewCard } from "@/components/restroom/review-card";
-import { getRestroomById, getReviewsByRestroomId } from "@/lib/api";
+import { loadPublicRestrooms, toRestroom, getReviewsByKey } from "@/lib/api";
 import { mockRestrooms, mockReviews } from "@/lib/mock-data";
 import { Restroom, Review } from "@/lib/types";
 
@@ -24,16 +24,27 @@ export default function RestroomDetailPage() {
   useEffect(() => {
     async function fetchData() {
       try {
-        const [r, revs] = await Promise.all([
-          getRestroomById(id),
-          getReviewsByRestroomId(id),
-        ]);
-        setRestroom(r);
-        setReviews(revs);
+        // 정적 데이터에서 화장실 찾기
+        const publicData = await loadPublicRestrooms();
+        const found = publicData.find((p) => p.id === id);
+
+        if (found) {
+          setRestroom(toRestroom(found));
+        } else {
+          // mock fallback
+          setRestroom(mockRestrooms.find((r) => r.id === id) ?? null);
+        }
+
+        // DB에서 리뷰 조회
+        try {
+          const revs = await getReviewsByKey(id);
+          setReviews(revs);
+        } catch {
+          setReviews(mockReviews.filter((r) => r.restroom_key === id));
+        }
       } catch {
-        // Supabase 미연결 시 mock 데이터 사용
         setRestroom(mockRestrooms.find((r) => r.id === id) ?? null);
-        setReviews(mockReviews.filter((r) => r.restroom_id === id));
+        setReviews(mockReviews.filter((r) => r.restroom_key === id));
       } finally {
         setLoading(false);
       }
@@ -90,6 +101,37 @@ export default function RestroomDetailPage() {
             ) : (
               <span className="text-red-500">현재 이용 불가</span>
             )}
+            {restroom.open_hours && (
+              <span className="ml-1">· {restroom.open_hours}</span>
+            )}
+          </div>
+
+          {/* 시설 정보 아이콘 */}
+          <div className="mt-3 flex flex-wrap gap-3">
+            {restroom.has_disabled_access && (
+              <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                <Accessibility className="h-4 w-4 text-blue-500" />
+                <span>장애인</span>
+              </div>
+            )}
+            {restroom.has_diaper_table && (
+              <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                <Baby className="h-4 w-4 text-pink-500" />
+                <span>기저귀대</span>
+              </div>
+            )}
+            {restroom.has_bidet && (
+              <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                <Droplets className="h-4 w-4 text-cyan-500" />
+                <span>비데</span>
+              </div>
+            )}
+            {restroom.is_free && (
+              <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                <Banknote className="h-4 w-4 text-emerald-500" />
+                <span>무료</span>
+              </div>
+            )}
           </div>
 
           <div className="mt-3 flex flex-wrap gap-1.5">
@@ -98,6 +140,11 @@ export default function RestroomDetailPage() {
                 {tag}
               </Badge>
             ))}
+            {restroom.source === "user" && (
+              <Badge variant="outline" className="text-xs border-emerald-500 text-emerald-600">
+                유저 등록
+              </Badge>
+            )}
           </div>
         </div>
 

@@ -17,6 +17,10 @@ declare global {
         Size: new (width: number, height: number) => unknown;
         Point: new (x: number, y: number) => unknown;
         InfoWindow: new (options: { content: string }) => KakaoInfoWindow;
+        services: {
+          Geocoder: new () => KakaoGeocoder;
+          Status: { OK: string };
+        };
         event: {
           addListener: (target: unknown, type: string, handler: () => void) => void;
         };
@@ -25,9 +29,15 @@ declare global {
   }
 }
 
+interface KakaoBounds {
+  getSouthWest: () => { getLat: () => number; getLng: () => number };
+  getNorthEast: () => { getLat: () => number; getLng: () => number };
+}
+
 interface KakaoMap {
   setCenter: (latlng: unknown) => void;
   relayout: () => void;
+  getBounds: () => KakaoBounds;
 }
 
 interface KakaoMarker {
@@ -39,15 +49,34 @@ interface KakaoInfoWindow {
   close: () => void;
 }
 
+interface KakaoGeocoder {
+  coord2RegionCode: (
+    lng: number,
+    lat: number,
+    callback: (result: Array<{ address_name: string; region_type: string }>, status: string) => void
+  ) => void;
+  coord2Address: (
+    lng: number,
+    lat: number,
+    callback: (result: Array<{ address: { address_name: string }; road_address: { address_name: string } | null }>, status: string) => void
+  ) => void;
+}
+
+export interface MapBounds {
+  sw: { lat: number; lng: number };
+  ne: { lat: number; lng: number };
+}
+
 interface MapViewProps {
   restrooms: Restroom[];
   userLocation?: { lat: number; lng: number } | null;
   className?: string;
+  onBoundsChange?: (bounds: MapBounds) => void;
 }
 
 const KAKAO_API_KEY = process.env.NEXT_PUBLIC_KAKAO_MAP_API_KEY;
 
-export function MapView({ restrooms, userLocation, className = "" }: MapViewProps) {
+export function MapView({ restrooms, userLocation, className = "", onBoundsChange }: MapViewProps) {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<KakaoMap | null>(null);
   const [sdkReady, setSdkReady] = useState(false);
@@ -89,7 +118,33 @@ export function MapView({ restrooms, userLocation, className = "" }: MapViewProp
     mapInstanceRef.current = map;
 
     // 컨테이너 크기 변경 대응
-    setTimeout(() => map.relayout(), 100);
+    setTimeout(() => {
+      map.relayout();
+      // 초기 bounds 전달
+      if (onBoundsChange) {
+        const bounds = map.getBounds();
+        const sw = bounds.getSouthWest();
+        const ne = bounds.getNorthEast();
+        onBoundsChange({
+          sw: { lat: sw.getLat(), lng: sw.getLng() },
+          ne: { lat: ne.getLat(), lng: ne.getLng() },
+        });
+      }
+    }, 100);
+
+    // 지도 이동/줌 시 bounds 업데이트
+    if (onBoundsChange) {
+      const handleBoundsChanged = () => {
+        const bounds = map.getBounds();
+        const sw = bounds.getSouthWest();
+        const ne = bounds.getNorthEast();
+        onBoundsChange({
+          sw: { lat: sw.getLat(), lng: sw.getLng() },
+          ne: { lat: ne.getLat(), lng: ne.getLng() },
+        });
+      };
+      kakao.maps.event.addListener(map, "idle", handleBoundsChanged);
+    }
 
     let openInfoWindow: KakaoInfoWindow | null = null;
 
@@ -117,7 +172,7 @@ export function MapView({ restrooms, userLocation, className = "" }: MapViewProp
         openInfoWindow = infoWindow;
       });
     });
-  }, [sdkReady, restrooms, userLocation]);
+  }, [sdkReady, restrooms, userLocation, onBoundsChange]);
 
   // API 키 없으면 placeholder
   if (error) {
@@ -135,7 +190,7 @@ export function MapView({ restrooms, userLocation, className = "" }: MapViewProp
     <>
       {/* next/script로 카카오맵 SDK 로드 — 중복 방지 내장 */}
       <Script
-        src={`https://dapi.kakao.com/v2/maps/sdk.js?appkey=${KAKAO_API_KEY}&autoload=false`}
+        src={`https://dapi.kakao.com/v2/maps/sdk.js?appkey=${KAKAO_API_KEY}&libraries=services&autoload=false`}
         strategy="afterInteractive"
         onLoad={handleScriptLoad}
         onError={() => setError(true)}
