@@ -116,10 +116,20 @@ NEXT_PUBLIC_KAKAO_MAP_API_KEY=<kakao-map-javascript-key>
 
 ## Database Setup
 
-Run `supabase/schema.sql` in Supabase SQL Editor to create:
-- `restrooms` table + `reviews` table (with FK to `auth.users`)
-- `restroom_stats` view (joins restrooms with avg rating / review count)
-- RLS policies (public read, auth-gated write)
+- **schema.sql은 참고용 전체 스키마** — 직접 수정하지 말 것
+- **스키마 변경 시 `supabase/migrations/` 폴더에 새 SQL 파일 추가** (예: `007_xxx.sql`)
+- 번호는 기존 마이그레이션 다음 순번으로 매김
+- 운영 DB에는 해당 마이그레이션 파일만 실행
+
+### 현재 마이그레이션 목록
+| 파일 | 내용 |
+|------|------|
+| `001_initial.sql` | user_restrooms, reviews, review_stats, RLS |
+| `002_add_gender_stalls_photos_editrequests.sql` | 성별 구분, 칸 수, 사진, edit_requests |
+| `003_add_safety_checks.sql` | safety_checks, safety_stats |
+| `004_add_admin_policies.sql` | admin_users, is_admin(), 관리자 RLS |
+| `005_add_public_restrooms_table.sql` | public_restrooms 테이블 + 인덱스 + GRANT |
+| `006_drop_unused_restrooms.sql` | 레거시 restrooms/restroom_stats 삭제 |
 
 ## Routes
 
