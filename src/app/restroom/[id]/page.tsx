@@ -263,6 +263,13 @@ export default function RestroomDetailPage() {
           </div>
         )}
 
+        {/* 데이터 기준일자 */}
+        {restroom.data_date && (
+          <p className="text-[10px] text-muted-foreground/60 text-right">
+            정보 기준일: {restroom.data_date}
+          </p>
+        )}
+
         {/* 수정 요청 모달 */}
         {showEditModal && (
           <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40" onClick={() => setShowEditModal(false)}>
@@ -413,12 +420,6 @@ export default function RestroomDetailPage() {
           </div>
         </div>
 
-        {/* 데이터 기준일자 */}
-        {restroom.data_date && (
-          <p className="text-[10px] text-muted-foreground/60 text-right">
-            정보 기준일: {restroom.data_date}
-          </p>
-        )}
       </div>
 
       {/* Sticky bottom CTA */}
