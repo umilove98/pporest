@@ -106,6 +106,72 @@ export function toRestroom(
   };
 }
 
+/**
+ * bounds 내 승인된 유저 등록 화장실 조회
+ */
+export async function getUserRestroomsByBounds(
+  swLat: number, swLng: number, neLat: number, neLng: number,
+  limit = 50
+): Promise<UserRestroom[]> {
+  const { data, error } = await supabase
+    .from("user_restrooms")
+    .select("*")
+    .eq("status", "approved")
+    .gte("lat", swLat)
+    .lte("lat", neLat)
+    .gte("lng", swLng)
+    .lte("lng", neLng)
+    .limit(limit);
+
+  if (error) return [];
+  return (data ?? []) as UserRestroom[];
+}
+
+/**
+ * UserRestroom → Restroom 변환 (화면 표시용)
+ */
+export function userRestroomToRestroom(r: UserRestroom): Restroom {
+  return {
+    ...r,
+    source: "user" as const,
+    rating: 0,
+    review_count: 0,
+  };
+}
+
+/**
+ * 승인된 유저 등록 화장실 검색 (이름/주소 ILIKE + 필터)
+ */
+export async function searchUserRestroomsDB(
+  query: string,
+  filters: string[],
+  limit = 50
+): Promise<UserRestroom[]> {
+  let q = supabase
+    .from("user_restrooms")
+    .select("*")
+    .eq("status", "approved");
+
+  if (query) {
+    q = q.or(`name.ilike.%${query}%,address.ilike.%${query}%`);
+  }
+
+  if (filters.includes("장애인 접근 가능")) {
+    q = q.eq("has_disabled_access", true);
+  }
+  if (filters.includes("기저귀 교환대")) {
+    q = q.eq("has_diaper_table", true);
+  }
+  if (filters.includes("24시간")) {
+    q = q.ilike("open_hours", "%24시간%");
+  }
+
+  const { data, error } = await q.limit(limit);
+
+  if (error) return [];
+  return (data ?? []) as UserRestroom[];
+}
+
 // === 사진 업로드 (Supabase Storage) ===
 
 /**

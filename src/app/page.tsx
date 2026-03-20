@@ -6,7 +6,7 @@ import { MapPin, Plus } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { MapView, MapBounds, MarkerData } from "@/components/restroom/map-view";
 import { RestroomCard } from "@/components/restroom/restroom-card";
-import { getPublicRestroomsByBounds, toRestroom } from "@/lib/api";
+import { getPublicRestroomsByBounds, getUserRestroomsByBounds, toRestroom, userRestroomToRestroom } from "@/lib/api";
 import { Restroom } from "@/lib/types";
 import { getDistanceMeters, formatDistance } from "@/lib/utils";
 
@@ -73,14 +73,23 @@ export default function HomePage() {
       setLoading(true);
       try {
         const { sw, ne } = mapBounds!;
-        const data = await getPublicRestroomsByBounds(sw.lat, sw.lng, ne.lat, ne.lng, MAX_MARKERS);
+        const [publicData, userData] = await Promise.all([
+          getPublicRestroomsByBounds(sw.lat, sw.lng, ne.lat, ne.lng, MAX_MARKERS),
+          getUserRestroomsByBounds(sw.lat, sw.lng, ne.lat, ne.lng, MAX_MARKERS),
+        ]);
 
         // 요청 사이에 bounds가 바뀌었으면 무시
         if (boundsRef.current !== mapBounds) return;
 
+        // 두 소스를 Restroom으로 통합
+        const allRestrooms: Restroom[] = [
+          ...publicData.map((p) => toRestroom(p)),
+          ...userData.map((u) => userRestroomToRestroom(u)),
+        ];
+
         // 거리순 정렬 (위치 있을 때)
         if (location) {
-          data.sort((a, b) => {
+          allRestrooms.sort((a, b) => {
             const distA = getDistanceMeters(location.lat, location.lng, a.lat, a.lng);
             const distB = getDistanceMeters(location.lat, location.lng, b.lat, b.lng);
             return distA - distB;
@@ -89,7 +98,7 @@ export default function HomePage() {
 
         // 마커용 (최대 50개)
         setFilteredMarkers(
-          data.slice(0, MAX_MARKERS).map((r) => ({
+          allRestrooms.slice(0, MAX_MARKERS).map((r) => ({
             id: r.id,
             name: r.name,
             lat: r.lat,
@@ -99,14 +108,13 @@ export default function HomePage() {
 
         // 리스트용 (최대 20개)
         setVisibleRestrooms(
-          data.slice(0, MAX_LIST_ITEMS).map((p) => {
-            const restroom = toRestroom(p);
+          allRestrooms.slice(0, MAX_LIST_ITEMS).map((r) => {
             if (location) {
-              restroom.distance = formatDistance(
-                getDistanceMeters(location.lat, location.lng, p.lat, p.lng)
+              r.distance = formatDistance(
+                getDistanceMeters(location.lat, location.lng, r.lat, r.lng)
               );
             }
-            return restroom;
+            return r;
           })
         );
       } catch (err) {
