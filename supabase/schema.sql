@@ -1,10 +1,36 @@
 -- PPORest Database Schema
 -- Supabase에서 SQL Editor를 통해 실행하세요.
---
--- 공공 화장실 데이터는 정적 JSON으로 서빙 (public/data/public-restrooms.json)
--- DB에는 유저 활동 데이터만 저장합니다.
 
--- 0. 관리자 테이블
+-- 0-1. 공공 화장실 데이터 (정적 JSON에서 DB로 마이그레이션)
+create extension if not exists pg_trgm;
+
+create table if not exists public_restrooms (
+  id text primary key,
+  name text not null,
+  address text not null,
+  lat double precision not null,
+  lng double precision not null,
+  disabled boolean default false,
+  diaper boolean default false,
+  hours text,
+  male_toilet smallint default 0,
+  male_urinal smallint default 0,
+  female_toilet smallint default 0,
+  emergency_bell boolean default false,
+  cctv boolean default false,
+  data_date text
+);
+
+create index if not exists idx_public_restrooms_lat_lng on public_restrooms(lat, lng);
+create index if not exists idx_public_restrooms_name_trgm on public_restrooms using gin (name gin_trgm_ops);
+create index if not exists idx_public_restrooms_address_trgm on public_restrooms using gin (address gin_trgm_ops);
+create index if not exists idx_public_restrooms_disabled on public_restrooms(disabled) where disabled = true;
+create index if not exists idx_public_restrooms_diaper on public_restrooms(diaper) where diaper = true;
+
+alter table public_restrooms enable row level security;
+create policy "public_restrooms_select" on public_restrooms for select using (true);
+
+-- 0-2. 관리자 테이블
 create table if not exists admin_users (
   user_id uuid primary key references auth.users(id) on delete cascade,
   created_at timestamptz default now()

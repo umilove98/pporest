@@ -6,8 +6,8 @@ import { MapPin, Plus } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { MapView, MapBounds, MarkerData } from "@/components/restroom/map-view";
 import { RestroomCard } from "@/components/restroom/restroom-card";
-import { loadPublicRestrooms, toRestroom } from "@/lib/api";
-import { PublicRestroom, Restroom } from "@/lib/types";
+import { getPublicRestroomsByBounds, toRestroom } from "@/lib/api";
+import { Restroom } from "@/lib/types";
 import { getDistanceMeters, formatDistance } from "@/lib/utils";
 
 const MAX_LIST_ITEMS = 20;
@@ -20,8 +20,8 @@ export default function HomePage() {
   const [mapBounds, setMapBounds] = useState<MapBounds | null>(null);
   const [filteredMarkers, setFilteredMarkers] = useState<MarkerData[]>([]);
   const [visibleRestrooms, setVisibleRestrooms] = useState<Restroom[]>([]);
-  const [dataReady, setDataReady] = useState(false);
-  const publicDataRef = useRef<PublicRestroom[]>([]);
+  const [loading, setLoading] = useState(false);
+  const boundsRef = useRef<MapBounds | null>(null);
 
   const handleBoundsChange = useCallback((bounds: MapBounds) => {
     setMapBounds(bounds);
@@ -64,65 +64,60 @@ export default function HomePage() {
     return () => clearInterval(interval);
   }, [location]);
 
-  // 2. 지도 bounds가 정해지면 데이터 로드 (최초 1회만)
+  // 2. bounds 변경 시 DB에서 조회
   useEffect(() => {
-    if (!mapBounds || dataReady) return;
+    if (!mapBounds) return;
+    boundsRef.current = mapBounds;
+
     async function load() {
+      setLoading(true);
       try {
-        const data = await loadPublicRestrooms();
-        publicDataRef.current = data;
-        setDataReady(true);
+        const { sw, ne } = mapBounds!;
+        const data = await getPublicRestroomsByBounds(sw.lat, sw.lng, ne.lat, ne.lng, MAX_MARKERS);
+
+        // 요청 사이에 bounds가 바뀌었으면 무시
+        if (boundsRef.current !== mapBounds) return;
+
+        // 거리순 정렬 (위치 있을 때)
+        if (location) {
+          data.sort((a, b) => {
+            const distA = getDistanceMeters(location.lat, location.lng, a.lat, a.lng);
+            const distB = getDistanceMeters(location.lat, location.lng, b.lat, b.lng);
+            return distA - distB;
+          });
+        }
+
+        // 마커용 (최대 50개)
+        setFilteredMarkers(
+          data.slice(0, MAX_MARKERS).map((r) => ({
+            id: r.id,
+            name: r.name,
+            lat: r.lat,
+            lng: r.lng,
+          }))
+        );
+
+        // 리스트용 (최대 20개)
+        setVisibleRestrooms(
+          data.slice(0, MAX_LIST_ITEMS).map((p) => {
+            const restroom = toRestroom(p);
+            if (location) {
+              restroom.distance = formatDistance(
+                getDistanceMeters(location.lat, location.lng, p.lat, p.lng)
+              );
+            }
+            return restroom;
+          })
+        );
       } catch {
-        setDataReady(true);
+        setFilteredMarkers([]);
+        setVisibleRestrooms([]);
+      } finally {
+        setLoading(false);
       }
     }
     load();
-  }, [mapBounds, dataReady]);
-
-  // 3. bounds 변경 또는 데이터 로드 완료 시 → 범위 내 필터링
-  useEffect(() => {
-    if (!mapBounds || !dataReady) return;
-
-    const data = publicDataRef.current;
-    const { sw, ne } = mapBounds;
-
-    // bounds 내 필터링
-    const inBounds = data.filter(
-      (r) => r.lat >= sw.lat && r.lat <= ne.lat && r.lng >= sw.lng && r.lng <= ne.lng
-    );
-
-    // 거리순 정렬 (위치 있을 때)
-    if (location) {
-      inBounds.sort((a, b) => {
-        const distA = getDistanceMeters(location.lat, location.lng, a.lat, a.lng);
-        const distB = getDistanceMeters(location.lat, location.lng, b.lat, b.lng);
-        return distA - distB;
-      });
-    }
-
-    // 마커용 (최대 50개, 경량)
-    setFilteredMarkers(
-      inBounds.slice(0, MAX_MARKERS).map((r) => ({
-        id: r.id,
-        name: r.name,
-        lat: r.lat,
-        lng: r.lng,
-      }))
-    );
-
-    // 리스트용 (최대 20개, 풀 변환)
-    setVisibleRestrooms(
-      inBounds.slice(0, MAX_LIST_ITEMS).map((p) => {
-        const restroom = toRestroom(p);
-        if (location) {
-          restroom.distance = formatDistance(
-            getDistanceMeters(location.lat, location.lng, p.lat, p.lng)
-          );
-        }
-        return restroom;
-      })
-    );
-  }, [mapBounds, dataReady, location]);
+  }, [mapBounds, location]);
 
   return (
     <div className="flex flex-col">
@@ -169,7 +164,7 @@ export default function HomePage() {
           <div className="flex justify-center py-8">
             <p className="text-sm text-muted-foreground">지도가 준비되면 주변 화장실이 표시됩니다</p>
           </div>
-        ) : !dataReady ? (
+        ) : loading ? (
           <div className="flex justify-center py-8">
             <p className="text-sm text-muted-foreground">데이터 로딩 중...</p>
           </div>
