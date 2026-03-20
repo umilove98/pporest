@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, MapPin, CheckCircle, Loader2 } from "lucide-react";
+import { ArrowLeft, MapPin, CheckCircle, Loader2, Camera, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -18,11 +18,20 @@ const FACILITY_OPTIONS = [
 
 const TAG_OPTIONS = ["무료", "24시간", "깨끗함", "장애인 접근 가능", "비데", "기저귀 교환대"];
 
+const GENDER_OPTIONS = [
+  { value: "mixed", label: "남녀공용" },
+  { value: "separated", label: "남녀분리" },
+  { value: "male_only", label: "남자전용" },
+  { value: "female_only", label: "여자전용" },
+] as const;
+
 type FacilityKey = (typeof FACILITY_OPTIONS)[number]["key"];
+type GenderType = (typeof GENDER_OPTIONS)[number]["value"];
 
 export default function NewRestroomPage() {
   const router = useRouter();
   const { user } = useAuth();
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [name, setName] = useState("");
   const [address, setAddress] = useState("");
@@ -36,6 +45,10 @@ export default function NewRestroomPage() {
   });
   const [isFree, setIsFree] = useState(true);
   const [openHours, setOpenHours] = useState("");
+  const [genderType, setGenderType] = useState<GenderType>("mixed");
+  const [maleStalls, setMaleStalls] = useState("");
+  const [femaleStalls, setFemaleStalls] = useState("");
+  const [photos, setPhotos] = useState<{ file: File; preview: string }[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [useCurrentLocation, setUseCurrentLocation] = useState(false);
@@ -48,7 +61,6 @@ export default function NewRestroomPage() {
       (pos) => {
         setLat(pos.coords.latitude);
         setLng(pos.coords.longitude);
-        // 역지오코딩으로 주소 자동 입력
         if (window.kakao?.maps?.services) {
           const geocoder = new window.kakao.maps.services.Geocoder();
           geocoder.coord2Address(pos.coords.longitude, pos.coords.latitude, (result, status) => {
@@ -65,13 +77,6 @@ export default function NewRestroomPage() {
     );
   }, []);
 
-  // 로그인 안 되어 있으면 안내
-  useEffect(() => {
-    if (user === null) {
-      // auth가 로딩 완료된 후 null이면 미로그인 상태
-    }
-  }, [user]);
-
   const toggleTag = (tag: string) => {
     setSelectedTags((prev) =>
       prev.includes(tag) ? prev.filter((t) => t !== tag) : [...prev, tag]
@@ -82,11 +87,36 @@ export default function NewRestroomPage() {
     setFacilities((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
+  const handlePhotoAdd = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+    const newPhotos = Array.from(files).slice(0, 5 - photos.length).map((file) => ({
+      file,
+      preview: URL.createObjectURL(file),
+    }));
+    setPhotos((prev) => [...prev, ...newPhotos].slice(0, 5));
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const removePhoto = (index: number) => {
+    setPhotos((prev) => {
+      URL.revokeObjectURL(prev[index].preview);
+      return prev.filter((_, i) => i !== index);
+    });
+  };
+
   const handleSubmit = async () => {
     if (!user || !name.trim() || !address.trim() || lat === null || lng === null) return;
 
     setSubmitting(true);
     try {
+      // 사진은 base64로 localStorage에 저장 (Supabase Storage 미연결 시)
+      const photoUrls: string[] = [];
+      for (const photo of photos) {
+        const base64 = await fileToBase64(photo.file);
+        photoUrls.push(base64);
+      }
+
       await createUserRestroom({
         name: name.trim(),
         address: address.trim(),
@@ -99,6 +129,10 @@ export default function NewRestroomPage() {
         has_bidet: facilities.has_bidet,
         is_free: isFree,
         open_hours: openHours.trim() || null,
+        gender_type: genderType,
+        male_stalls: maleStalls ? parseInt(maleStalls) : null,
+        female_stalls: femaleStalls ? parseInt(femaleStalls) : null,
+        photo_urls: photoUrls,
       });
       setSubmitted(true);
     } catch {
@@ -216,6 +250,63 @@ export default function NewRestroomPage() {
           </div>
         </section>
 
+        {/* 화장실 구분 */}
+        <section className="flex flex-col gap-3">
+          <h2 className="text-sm font-semibold">화장실 구분</h2>
+          <div className="grid grid-cols-2 gap-2">
+            {GENDER_OPTIONS.map(({ value, label }) => (
+              <button
+                key={value}
+                onClick={() => setGenderType(value)}
+                className={`rounded-lg border px-3 py-2.5 text-sm transition-colors ${
+                  genderType === value
+                    ? "border-emerald-500 bg-emerald-50 font-medium text-emerald-700"
+                    : "border-muted hover:bg-muted/50"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </section>
+
+        {/* 칸 수 정보 */}
+        <section className="flex flex-col gap-3">
+          <h2 className="text-sm font-semibold">칸 수 정보</h2>
+          <Card>
+            <CardContent className="flex flex-col gap-3 p-3">
+              {(genderType === "mixed" || genderType === "separated" || genderType === "male_only") && (
+                <div className="flex items-center gap-3">
+                  <label className="w-20 text-sm text-muted-foreground">남자 화장실</label>
+                  <Input
+                    type="number"
+                    min="0"
+                    placeholder="칸 수"
+                    value={maleStalls}
+                    onChange={(e) => setMaleStalls(e.target.value)}
+                    className="w-24"
+                  />
+                  <span className="text-xs text-muted-foreground">칸</span>
+                </div>
+              )}
+              {(genderType === "mixed" || genderType === "separated" || genderType === "female_only") && (
+                <div className="flex items-center gap-3">
+                  <label className="w-20 text-sm text-muted-foreground">여자 화장실</label>
+                  <Input
+                    type="number"
+                    min="0"
+                    placeholder="칸 수"
+                    value={femaleStalls}
+                    onChange={(e) => setFemaleStalls(e.target.value)}
+                    className="w-24"
+                  />
+                  <span className="text-xs text-muted-foreground">칸</span>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </section>
+
         {/* 운영 정보 */}
         <section className="flex flex-col gap-3">
           <h2 className="text-sm font-semibold">운영 정보</h2>
@@ -264,6 +355,42 @@ export default function NewRestroomPage() {
               ))}
             </CardContent>
           </Card>
+        </section>
+
+        {/* 사진 첨부 */}
+        <section className="flex flex-col gap-3">
+          <h2 className="text-sm font-semibold">사진 첨부 (최대 5장)</h2>
+          <div className="flex flex-wrap gap-2">
+            {photos.map((photo, i) => (
+              <div key={i} className="relative h-20 w-20 overflow-hidden rounded-lg border">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={photo.preview} alt={`사진 ${i + 1}`} className="h-full w-full object-cover" />
+                <button
+                  onClick={() => removePhoto(i)}
+                  className="absolute right-0.5 top-0.5 rounded-full bg-black/60 p-0.5 text-white"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            ))}
+            {photos.length < 5 && (
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="flex h-20 w-20 flex-col items-center justify-center gap-1 rounded-lg border-2 border-dashed border-muted-foreground/30 text-muted-foreground hover:border-emerald-400 hover:text-emerald-500"
+              >
+                <Camera className="h-5 w-5" />
+                <span className="text-[10px]">추가</span>
+              </button>
+            )}
+          </div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            multiple
+            onChange={handlePhotoAdd}
+            className="hidden"
+          />
         </section>
 
         {/* 태그 */}
@@ -315,4 +442,13 @@ export default function NewRestroomPage() {
       </div>
     </div>
   );
+}
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
 }

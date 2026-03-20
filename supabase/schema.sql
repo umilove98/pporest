@@ -20,6 +20,23 @@ create table if not exists user_restrooms (
   has_bidet boolean default false,
   is_free boolean default true,
   open_hours text,
+  gender_type text not null default 'mixed' check (gender_type in ('mixed', 'separated', 'male_only', 'female_only')),
+  male_stalls smallint,
+  female_stalls smallint,
+  photo_urls text[] default '{}',
+  created_at timestamptz default now()
+);
+
+-- 6. 공공데이터 수정 요청
+create table if not exists edit_requests (
+  id uuid primary key default gen_random_uuid(),
+  restroom_id text not null,
+  submitted_by uuid not null references auth.users(id),
+  field text not null,
+  current_value text not null default '',
+  suggested_value text not null,
+  reason text default '',
+  status text not null default 'pending' check (status in ('pending', 'approved', 'rejected')),
   created_at timestamptz default now()
 );
 
