@@ -12,7 +12,7 @@ declare global {
         load: (callback: () => void) => void;
         Map: new (container: HTMLElement, options: { center: unknown; level: number }) => KakaoMap;
         LatLng: new (lat: number, lng: number) => unknown;
-        Marker: new (options: { position: unknown; map: KakaoMap; image?: unknown }) => KakaoMarker;
+        Marker: new (options: { position: unknown; map?: KakaoMap; image?: unknown }) => KakaoMarker;
         MarkerImage: new (src: string, size: unknown, options?: { offset: unknown }) => unknown;
         Size: new (width: number, height: number) => unknown;
         Point: new (x: number, y: number) => unknown;
@@ -23,6 +23,7 @@ declare global {
         };
         event: {
           addListener: (target: unknown, type: string, handler: () => void) => void;
+          removeListener: (target: unknown, type: string, handler: () => void) => void;
         };
       };
     };
@@ -79,36 +80,41 @@ const KAKAO_API_KEY = process.env.NEXT_PUBLIC_KAKAO_MAP_API_KEY;
 export function MapView({ restrooms, userLocation, className = "", onBoundsChange }: MapViewProps) {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<KakaoMap | null>(null);
+  const markersRef = useRef<KakaoMarker[]>([]);
+  const onBoundsChangeRef = useRef(onBoundsChange);
+  const initializedRef = useRef(false);
   const [sdkReady, setSdkReady] = useState(false);
   const [error, setError] = useState(!KAKAO_API_KEY);
 
-  // SDK가 이미 로드된 경우 체크 (Map 생성자 존재 여부로 판단)
+  // 콜백 ref 최신 유지 (의존성 배열에 넣지 않기 위해)
+  useEffect(() => {
+    onBoundsChangeRef.current = onBoundsChange;
+  }, [onBoundsChange]);
+
+  // SDK 이미 로드된 경우 체크
   useEffect(() => {
     if (typeof window !== "undefined" && window.kakao?.maps?.Map) {
       setSdkReady(true);
     }
   }, []);
 
-  // Script onLoad 핸들러
   const handleScriptLoad = useCallback(() => {
     if (window.kakao?.maps?.Map) {
-      // 이미 load() 호출 완료된 경우
       setSdkReady(true);
     } else {
-      // autoload=false이므로 load() 호출 필요
       window.kakao.maps.load(() => setSdkReady(true));
     }
   }, []);
 
-  // 지도 초기화 + 마커
+  // 지도 초기화 (한 번만)
   useEffect(() => {
-    if (!sdkReady || !mapRef.current || restrooms.length === 0) return;
+    if (!sdkReady || !mapRef.current || initializedRef.current) return;
 
     const { kakao } = window;
 
-    // 사용자 위치가 있으면 사용자 위치를, 없으면 첫 번째 화장실을 중심으로
-    const centerLat = userLocation?.lat ?? restrooms[0].lat;
-    const centerLng = userLocation?.lng ?? restrooms[0].lng;
+    // 초기 중심: 유저 위치 > 첫 화장실 > 서울시청
+    const centerLat = userLocation?.lat ?? restrooms[0]?.lat ?? 37.5665;
+    const centerLng = userLocation?.lng ?? restrooms[0]?.lng ?? 126.978;
     const center = new kakao.maps.LatLng(centerLat, centerLng);
 
     const map = new kakao.maps.Map(mapRef.current, {
@@ -116,37 +122,53 @@ export function MapView({ restrooms, userLocation, className = "", onBoundsChang
       level: 5,
     });
     mapInstanceRef.current = map;
+    initializedRef.current = true;
 
-    // 컨테이너 크기 변경 대응
+    setTimeout(() => map.relayout(), 100);
+
+    // idle 이벤트로 bounds 전달
+    kakao.maps.event.addListener(map, "idle", () => {
+      if (!onBoundsChangeRef.current) return;
+      const bounds = map.getBounds();
+      const sw = bounds.getSouthWest();
+      const ne = bounds.getNorthEast();
+      onBoundsChangeRef.current({
+        sw: { lat: sw.getLat(), lng: sw.getLng() },
+        ne: { lat: ne.getLat(), lng: ne.getLng() },
+      });
+    });
+
+    // 초기 bounds 전달
     setTimeout(() => {
-      map.relayout();
-      // 초기 bounds 전달
-      if (onBoundsChange) {
-        const bounds = map.getBounds();
-        const sw = bounds.getSouthWest();
-        const ne = bounds.getNorthEast();
-        onBoundsChange({
-          sw: { lat: sw.getLat(), lng: sw.getLng() },
-          ne: { lat: ne.getLat(), lng: ne.getLng() },
-        });
-      }
-    }, 100);
+      if (!onBoundsChangeRef.current) return;
+      const bounds = map.getBounds();
+      const sw = bounds.getSouthWest();
+      const ne = bounds.getNorthEast();
+      onBoundsChangeRef.current({
+        sw: { lat: sw.getLat(), lng: sw.getLng() },
+        ne: { lat: ne.getLat(), lng: ne.getLng() },
+      });
+    }, 200);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sdkReady]);
 
-    // 지도 이동/줌 시 bounds 업데이트
-    if (onBoundsChange) {
-      const handleBoundsChanged = () => {
-        const bounds = map.getBounds();
-        const sw = bounds.getSouthWest();
-        const ne = bounds.getNorthEast();
-        onBoundsChange({
-          sw: { lat: sw.getLat(), lng: sw.getLng() },
-          ne: { lat: ne.getLat(), lng: ne.getLng() },
-        });
-      };
-      kakao.maps.event.addListener(map, "idle", handleBoundsChanged);
-    }
+  // 유저 위치 변경 시 지도 중심 이동 (재생성 아님)
+  useEffect(() => {
+    if (!mapInstanceRef.current || !userLocation) return;
+    const { kakao } = window;
+    mapInstanceRef.current.setCenter(new kakao.maps.LatLng(userLocation.lat, userLocation.lng));
+  }, [userLocation]);
 
-    let openInfoWindow: KakaoInfoWindow | null = null;
+  // 마커 업데이트 (지도 재생성 없이 마커만 교체)
+  useEffect(() => {
+    const map = mapInstanceRef.current;
+    if (!map || !sdkReady) return;
+
+    const { kakao } = window;
+
+    // 기존 마커 제거
+    markersRef.current.forEach((m) => m.setMap(null));
+    markersRef.current = [];
 
     // 녹색 커스텀 마커
     const markerSvg = encodeURIComponent(
@@ -158,9 +180,12 @@ export function MapView({ restrooms, userLocation, className = "", onBoundsChang
       { offset: new kakao.maps.Point(14, 40) }
     );
 
+    let openInfoWindow: KakaoInfoWindow | null = null;
+
     restrooms.forEach((r) => {
       const position = new kakao.maps.LatLng(r.lat, r.lng);
       const marker = new kakao.maps.Marker({ position, map, image: markerImage });
+      markersRef.current.push(marker);
 
       const infoWindow = new kakao.maps.InfoWindow({
         content: `<div style="padding:4px 8px;font-size:12px;white-space:nowrap;">${r.name}</div>`,
@@ -172,9 +197,8 @@ export function MapView({ restrooms, userLocation, className = "", onBoundsChang
         openInfoWindow = infoWindow;
       });
     });
-  }, [sdkReady, restrooms, userLocation, onBoundsChange]);
+  }, [sdkReady, restrooms]);
 
-  // API 키 없으면 placeholder
   if (error) {
     return (
       <div className={`relative flex h-48 items-center justify-center rounded-lg bg-muted ${className}`}>
@@ -188,7 +212,6 @@ export function MapView({ restrooms, userLocation, className = "", onBoundsChang
 
   return (
     <>
-      {/* next/script로 카카오맵 SDK 로드 — 중복 방지 내장 */}
       <Script
         src={`https://dapi.kakao.com/v2/maps/sdk.js?appkey=${KAKAO_API_KEY}&libraries=services&autoload=false`}
         strategy="afterInteractive"
