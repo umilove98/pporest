@@ -232,6 +232,23 @@ export async function createEditRequest(req: {
 // === 관리자 기능 ===
 
 /**
+ * 현재 로그인한 유저가 관리자인지 확인
+ */
+export async function checkIsAdmin(): Promise<boolean> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return false;
+
+  const { data, error } = await supabase
+    .from("admin_users")
+    .select("user_id")
+    .eq("user_id", user.id)
+    .maybeSingle();
+
+  if (error) return false;
+  return !!data;
+}
+
+/**
  * 대기 중인 유저 등록 화장실 목록
  */
 export async function getPendingRestrooms(): Promise<UserRestroom[]> {
