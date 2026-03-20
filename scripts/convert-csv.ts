@@ -1,23 +1,27 @@
 /**
- * 공공데이터 CSV → 정적 JSON 변환 스크립트
+ * 공공데이터 CSV → JSON / Supabase import용 CSV 변환 스크립트
  *
  * 사용법:
- *   npx tsx scripts/convert-csv.ts
+ *   npx tsx scripts/convert-csv.ts          # JSON 출력 (기본)
+ *   npx tsx scripts/convert-csv.ts --csv    # Supabase import용 CSV 출력
  *
- * data/ 폴더에 있는 모든 CSV 파일을 읽어서 하나의 JSON으로 합칩니다.
+ * data/ 폴더에 있는 모든 CSV 파일을 읽어서 변환합니다.
  * 파일명 예시:
  *   - 공중화장실정보_서울특별시.csv
  *   - 공중화장실정보_경기도.csv
- *   - public-restrooms.csv (단일 파일)
  *
- * 출력: public/data/public-restrooms.json
+ * 출력:
+ *   JSON: public/data/public-restrooms.json
+ *   CSV:  public/data/public-restrooms-import.csv (Supabase Table Editor에서 import 가능)
  */
 
 import * as fs from "fs";
 import * as path from "path";
 
 const DATA_DIR = path.resolve(__dirname, "../data");
-const OUTPUT_PATH = path.resolve(__dirname, "../public/data/public-restrooms.json");
+const OUTPUT_JSON = path.resolve(__dirname, "../public/data/public-restrooms.json");
+const OUTPUT_CSV = path.resolve(__dirname, "../public/data/public-restrooms-import.csv");
+const MODE = process.argv.includes("--csv") ? "csv" : "json";
 
 function decodeFile(buffer: Buffer): string {
   // UTF-8 BOM
@@ -218,14 +222,44 @@ function main() {
 
   console.log(`\n총 결과: ${final.length}건 (스킵: ${totalSkipped}건)`);
 
-  // JSON 저장
-  fs.mkdirSync(path.dirname(OUTPUT_PATH), { recursive: true });
-  fs.writeFileSync(OUTPUT_PATH, JSON.stringify(final));
+  const outputDir = path.dirname(OUTPUT_JSON);
+  fs.mkdirSync(outputDir, { recursive: true });
 
-  const sizeKB = (fs.statSync(OUTPUT_PATH).size / 1024).toFixed(0);
-  const sizeMB = (fs.statSync(OUTPUT_PATH).size / 1024 / 1024).toFixed(1);
-  console.log(`\n저장 완료: public/data/public-restrooms.json`);
-  console.log(`파일 크기: ${Number(sizeMB) >= 1 ? sizeMB + " MB" : sizeKB + " KB"}`);
+  if (MODE === "csv") {
+    // Supabase import용 CSV 출력
+    const csvHeader = "id,name,address,lat,lng,disabled,diaper,hours,male_toilet,male_urinal,female_toilet,emergency_bell,cctv,data_date";
+    const csvRows = final.map((r) => {
+      const esc = (v: string | null) => {
+        if (v == null) return "";
+        if (v.includes(",") || v.includes('"') || v.includes("\n")) {
+          return `"${v.replace(/"/g, '""')}"`;
+        }
+        return v;
+      };
+      return [
+        esc(r.id), esc(r.name), esc(r.address),
+        r.lat, r.lng,
+        r.disabled, r.diaper,
+        esc(r.hours),
+        r.male_toilet, r.male_urinal, r.female_toilet,
+        r.emergency_bell, r.cctv,
+        esc(r.data_date),
+      ].join(",");
+    });
+
+    fs.writeFileSync(OUTPUT_CSV, [csvHeader, ...csvRows].join("\n"));
+    const size = (fs.statSync(OUTPUT_CSV).size / 1024).toFixed(0);
+    console.log(`\n저장 완료: public/data/public-restrooms-import.csv`);
+    console.log(`파일 크기: ${size} KB`);
+    console.log(`\nSupabase Table Editor → public_restrooms → Import data 에서 이 CSV를 업로드하세요.`);
+  } else {
+    // JSON 출력
+    fs.writeFileSync(OUTPUT_JSON, JSON.stringify(final));
+    const sizeKB = (fs.statSync(OUTPUT_JSON).size / 1024).toFixed(0);
+    const sizeMB = (fs.statSync(OUTPUT_JSON).size / 1024 / 1024).toFixed(1);
+    console.log(`\n저장 완료: public/data/public-restrooms.json`);
+    console.log(`파일 크기: ${Number(sizeMB) >= 1 ? sizeMB + " MB" : sizeKB + " KB"}`);
+  }
 }
 
 main();
