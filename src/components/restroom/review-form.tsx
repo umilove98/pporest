@@ -179,8 +179,10 @@ export function ReviewForm({ restroomId, onSubmit }: ReviewFormProps) {
         setComment("");
         removePhoto();
       }, 2000);
-    } catch {
-      setError("리뷰 등록에 실패했습니다. 다시 시도해주세요.");
+    } catch (err) {
+      console.error("[ReviewForm] submit error →", err);
+      const msg = err instanceof Error ? err.message : String(err);
+      setError(`리뷰 등록에 실패했습니다: ${msg}`);
     } finally {
       setLoading(false);
       setSubmitPhase(null);
