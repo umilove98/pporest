@@ -716,47 +716,28 @@ export async function createReview(review: {
   has_photo?: boolean;
   photo_url?: string;
 }): Promise<Review> {
-  // 스냅샷 데이터 병렬 조회 (실패해도 리뷰 등록은 진행)
-  let avgRating: number | null = null;
-  let topPrefs: string[] = [];
-  try {
-    [avgRating, topPrefs] = await Promise.all([
-      getUserAvgRating(review.user_id),
-      getUserTopPreferences(review.user_id),
-    ]);
-  } catch (err) {
-    console.error("[createReview] snapshot fetch failed:", err);
-  }
+  // 스냅샷 데이터 병렬 조회
+  const [avgRating, topPrefs] = await Promise.all([
+    getUserAvgRating(review.user_id),
+    getUserTopPreferences(review.user_id),
+  ]);
 
-  // 스냅샷 컬럼이 DB에 없을 수 있으므로, 값이 있을 때만 포함
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const insertPayload: Record<string, any> = { ...review };
-  if (avgRating !== null) insertPayload.user_avg_rating = avgRating;
-  if (topPrefs.length > 0) insertPayload.user_top_preferences = topPrefs;
-
+  const insertPayload = {
+    ...review,
+    user_avg_rating: avgRating,
+    user_top_preferences: topPrefs.length > 0 ? topPrefs : null,
+  };
   console.log("[createReview] insert payload →", insertPayload);
 
-  // 스냅샷 컬럼 포함 insert 시도 → 컬럼 에러 시 스냅샷 없이 재시도
-  let { data, error } = await supabase
+  const { data, error } = await supabase
     .from("reviews")
     .insert(insertPayload)
     .select()
     .single();
 
-  if (error && (error.message?.includes("column") || error.code === "PGRST204")) {
-    console.warn("[createReview] snapshot columns may not exist, retrying without →", error.message);
-    delete insertPayload.user_avg_rating;
-    delete insertPayload.user_top_preferences;
-    ({ data, error } = await supabase
-      .from("reviews")
-      .insert(insertPayload)
-      .select()
-      .single());
-  }
-
   if (error) {
     console.error("[createReview] insert error →", error);
-    throw error;
+    throw new Error(`리뷰 저장 실패: ${error.message} (code: ${error.code})`);
   }
   console.log("[createReview] saved →", data);
   return data as Review;
@@ -870,23 +851,17 @@ export async function getReviewsByUserId(
 export async function moderatePhoto(
   file: File
 ): Promise<{ allowed: boolean; reason: string }> {
-  try {
-    const formData = new FormData();
-    formData.append("file", file);
+  const formData = new FormData();
+  formData.append("file", file);
 
-    const res = await fetch("/api/moderate-photo", {
-      method: "POST",
-      body: formData,
-    });
-    if (!res.ok) {
-      console.error("[moderatePhoto] API error:", res.status);
-      return { allowed: true, reason: "" }; // 검증 실패 시 허용 (리뷰 등록 차단 방지)
-    }
-    return await res.json();
-  } catch (err) {
-    console.error("[moderatePhoto] fetch failed:", err);
-    return { allowed: true, reason: "" };
+  const res = await fetch("/api/moderate-photo", {
+    method: "POST",
+    body: formData,
+  });
+  if (!res.ok) {
+    throw new Error(`사진 검증 서비스 오류 (${res.status})`);
   }
+  return res.json();
 }
 
 /**
@@ -895,21 +870,15 @@ export async function moderatePhoto(
 export async function moderateComment(
   comment: string
 ): Promise<{ allowed: boolean; reason: string }> {
-  try {
-    const res = await fetch("/api/moderate-comment", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ comment }),
-    });
-    if (!res.ok) {
-      console.error("[moderateComment] API error:", res.status);
-      return { allowed: true, reason: "" }; // 검증 실패 시 허용 (리뷰 등록 차단 방지)
-    }
-    return await res.json();
-  } catch (err) {
-    console.error("[moderateComment] fetch failed:", err);
-    return { allowed: true, reason: "" };
+  const res = await fetch("/api/moderate-comment", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ comment }),
+  });
+  if (!res.ok) {
+    throw new Error(`리뷰 검증 서비스 오류 (${res.status})`);
   }
+  return res.json();
 }
 
 // === 수정 요청 ===
