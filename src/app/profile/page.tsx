@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { User, MessageSquare, Camera, LogOut, Star, Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -10,14 +10,23 @@ import { StarRating } from "@/components/restroom/star-rating";
 import { LoginForm } from "@/components/auth/login-form";
 import { useAuth } from "@/components/auth/auth-provider";
 import { signOut } from "@/lib/auth";
-import { getReviewsByUserId, checkIsAdmin } from "@/lib/api";
+import { getReviewsByUserId, checkIsAdmin, updateAvatar } from "@/lib/api";
 import { Review } from "@/lib/types";
 
+function formatDateTime(iso: string): string {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}.${pad(d.getMonth() + 1)}.${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
 export default function ProfilePage() {
-  const { user, nickname, loading } = useAuth();
+  const { user, nickname, avatarUrl, loading, refreshProfile } = useAuth();
   const [reviews, setReviews] = useState<Review[]>([]);
   const [reviewsLoading, setReviewsLoading] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -28,6 +37,21 @@ export default function ProfilePage() {
       .finally(() => setReviewsLoading(false));
     checkIsAdmin().then(setIsAdmin).catch(() => setIsAdmin(false));
   }, [user]);
+
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !user) return;
+    setUploading(true);
+    try {
+      await updateAvatar(user.id, file);
+      refreshProfile();
+    } catch {
+      alert("사진 업로드에 실패했습니다.");
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
 
   const photoCount = reviews.filter((r) => r.has_photo).length;
   const avgRating = reviews.length > 0
@@ -51,11 +75,43 @@ export default function ProfilePage() {
       <div className="flex flex-col items-center px-4 pt-8">
         {user ? (
           <>
-            {/* 프로필 정보 */}
-            <div className="flex h-20 w-20 items-center justify-center rounded-full bg-muted">
-              <User className="h-10 w-10 text-muted-foreground" />
-            </div>
-            <h2 className="mt-3 text-lg font-semibold">
+            {/* 프로필 사진 */}
+            <button
+              className="relative group"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading}
+            >
+              <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-full bg-muted">
+                {avatarUrl ? (
+                  /* eslint-disable-next-line @next/next/no-img-element */
+                  <img
+                    src={avatarUrl}
+                    alt="프로필 사진"
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <User className="h-10 w-10 text-muted-foreground" />
+                )}
+              </div>
+              <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
+                <Camera className="h-5 w-5 text-white" />
+              </div>
+              {uploading && (
+                <div className="absolute inset-0 flex items-center justify-center rounded-full bg-black/40">
+                  <div className="h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                </div>
+              )}
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleAvatarUpload}
+              className="hidden"
+            />
+            <p className="mt-1 text-[10px] text-muted-foreground">사진을 눌러 변경</p>
+
+            <h2 className="mt-2 text-lg font-semibold">
               {nickname || "로딩 중..."}
             </h2>
             <p className="text-sm text-muted-foreground">{user.email}</p>
@@ -93,7 +149,7 @@ export default function ProfilePage() {
                       <CardContent className="p-4">
                         <div className="flex items-center justify-between">
                           <StarRating rating={review.rating} />
-                          <span className="text-xs text-muted-foreground">{review.created_at}</span>
+                          <span className="text-xs text-muted-foreground">{formatDateTime(review.created_at)}</span>
                         </div>
                         <p className="mt-2 text-sm leading-relaxed">{review.comment}</p>
                       </CardContent>

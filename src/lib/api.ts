@@ -56,6 +56,47 @@ export async function getNickname(userId: string): Promise<string | null> {
   return data?.nickname ?? null;
 }
 
+/**
+ * 프로필 사진 URL 조회
+ */
+export async function getAvatarUrl(userId: string): Promise<string | null> {
+  const { data } = await supabase
+    .from("user_profiles")
+    .select("avatar_url")
+    .eq("user_id", userId)
+    .maybeSingle();
+  return data?.avatar_url ?? null;
+}
+
+/**
+ * 프로필 사진 업로드 및 URL 저장
+ */
+export async function updateAvatar(userId: string, file: File): Promise<string> {
+  const ext = file.name.split(".").pop() || "jpg";
+  const fileName = `avatars/${userId}/${Date.now()}.${ext}`;
+
+  const { error: uploadError } = await supabase.storage
+    .from("restroom-photos")
+    .upload(fileName, file, { contentType: file.type, upsert: true });
+
+  if (uploadError) throw uploadError;
+
+  const { data } = supabase.storage
+    .from("restroom-photos")
+    .getPublicUrl(fileName);
+
+  const avatarUrl = data.publicUrl;
+
+  const { error: updateError } = await supabase
+    .from("user_profiles")
+    .update({ avatar_url: avatarUrl })
+    .eq("user_id", userId);
+
+  if (updateError) throw updateError;
+
+  return avatarUrl;
+}
+
 // === 공공 화장실 DB 조회 ===
 
 /**
