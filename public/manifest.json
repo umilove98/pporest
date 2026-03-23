@@ -4,7 +4,7 @@
   "description": "내 주변 공중화장실을 빠르게 찾고 리뷰를 남겨보세요",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#ffffff",
+  "background_color": "#10b981",
   "theme_color": "#10b981",
   "orientation": "portrait",
   "scope": "/",
