@@ -307,12 +307,11 @@ function PreferenceSummary({ preferences }: { preferences: UserPreferences }) {
 
   return (
     <div className="flex flex-wrap gap-1.5">
-      {items.map(([key, { label, emoji }]) => (
+      {items.map(([key, { label }]) => (
         <span
           key={key}
           className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300"
         >
-          <span>{emoji}</span>
           <span>{preferences[key as keyof UserPreferences]}.</span>
           <span>{label}</span>
         </span>
