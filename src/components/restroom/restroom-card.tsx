@@ -7,7 +7,7 @@ import { TierBadge } from "@/components/preference/tier-badge";
 import { PreferenceKey, Restroom, RestroomTier, UserPreferences } from "@/lib/types";
 
 /** 취향 키 → 태그/속성 매핑 (해당하면 강조) */
-function getHighlightedTags(restroom: Restroom, prefs: UserPreferences | null): Set<string> {
+export function getHighlightedTags(restroom: Restroom, prefs: UserPreferences | null): Set<string> {
   const highlighted = new Set<string>();
   if (!prefs) return highlighted;
 
@@ -31,7 +31,7 @@ function getHighlightedTags(restroom: Restroom, prefs: UserPreferences | null): 
 }
 
 /** 화장실 속성 기반 추가 태그 생성 */
-function getExtraTags(restroom: Restroom, highlighted: Set<string>): { label: string; key: string; isHighlighted: boolean }[] {
+export function getExtraTags(restroom: Restroom, highlighted: Set<string>): { label: string; key: string; isHighlighted: boolean }[] {
   const extras: { label: string; key: string; isHighlighted: boolean }[] = [];
 
   if (restroom.has_bidet) {
