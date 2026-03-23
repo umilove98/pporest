@@ -61,7 +61,7 @@ export function RestroomCard({ restroom, tier, preferences }: RestroomCardProps)
   const extraTags = getExtraTags(restroom, highlighted);
 
   return (
-    <Link href={`/restroom/${restroom.id}`}>
+    <Link href={`/restroom/${restroom.id}${tier ? `?tier=${tier}` : ""}`}>
       <Card className="transition-colors active:bg-accent/50">
         <CardContent className="p-4">
           <div className="flex items-start justify-between">
