@@ -596,8 +596,46 @@ export async function getReviewsByKey(restroomKey: string): Promise<Review[]> {
   }
 }
 
+const PREFERENCE_LABELS: Record<PreferenceKey, string> = {
+  cleanliness: "청결도",
+  gender_separated: "남녀분리",
+  bidet: "비데",
+  stall_count: "칸 수",
+  accessibility: "접근성",
+  safety: "안전",
+};
+
 /**
- * 리뷰 등록
+ * 사용자의 상위 취향 목록을 한글 라벨로 반환 (우선순위 1~3)
+ */
+async function getUserTopPreferences(userId: string): Promise<string[]> {
+  const prefs = await getUserPreferences(userId);
+  if (!prefs) return [];
+
+  const entries = (Object.keys(PREFERENCE_LABELS) as PreferenceKey[])
+    .filter((k) => prefs[k] != null)
+    .sort((a, b) => (prefs[a] as number) - (prefs[b] as number))
+    .slice(0, 3);
+
+  return entries.map((k) => PREFERENCE_LABELS[k]);
+}
+
+/**
+ * 사용자의 현재 평균 리뷰 평점
+ */
+async function getUserAvgRating(userId: string): Promise<number | null> {
+  const { data, error } = await supabase
+    .from("reviews")
+    .select("rating")
+    .eq("user_id", userId);
+
+  if (error || !data || data.length === 0) return null;
+  const avg = data.reduce((sum, r) => sum + r.rating, 0) / data.length;
+  return Math.round(avg * 10) / 10;
+}
+
+/**
+ * 리뷰 등록 (작성 시점 사용자 평균평점 + 취향 스냅샷 포함)
  */
 export async function createReview(review: {
   restroom_id: string;
@@ -608,9 +646,19 @@ export async function createReview(review: {
   has_photo?: boolean;
   photo_url?: string;
 }): Promise<Review> {
+  // 스냅샷 데이터 병렬 조회
+  const [avgRating, topPrefs] = await Promise.all([
+    getUserAvgRating(review.user_id),
+    getUserTopPreferences(review.user_id),
+  ]);
+
   const { data, error } = await supabase
     .from("reviews")
-    .insert(review)
+    .insert({
+      ...review,
+      user_avg_rating: avgRating,
+      user_top_preferences: topPrefs.length > 0 ? topPrefs : null,
+    })
     .select()
     .single();
 

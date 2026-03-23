@@ -144,38 +144,47 @@ export function ReviewCard({ review, onUpdated }: ReviewCardProps) {
           </>
         )}
 
-        {/* 본인 리뷰: 수정/삭제 버튼 */}
-        {isOwner && !editing && (
-          <div className="mt-2 flex justify-end gap-1">
-            {confirmDelete ? (
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-red-500">삭제할까요?</span>
-                <Button size="sm" variant="destructive" onClick={handleDelete} disabled={saving} className="h-7 text-xs px-2">
-                  {saving ? "삭제 중..." : "확인"}
-                </Button>
-                <Button size="sm" variant="ghost" onClick={() => setConfirmDelete(false)} disabled={saving} className="h-7 text-xs px-2">
-                  취소
-                </Button>
+        {/* 리뷰어 취향 + 평균평점 / 수정·삭제 */}
+        {!editing && (
+          <div className="mt-2 flex items-center justify-between">
+            <span className="text-[10px] text-muted-foreground/60">
+              {review.user_avg_rating != null && `평균 ${review.user_avg_rating}점`}
+              {review.user_avg_rating != null && review.user_top_preferences?.length ? " · " : ""}
+              {review.user_top_preferences?.length ? review.user_top_preferences.join(", ") : ""}
+            </span>
+            {isOwner && (
+              <div className="flex gap-1">
+                {confirmDelete ? (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-red-500">삭제할까요?</span>
+                    <Button size="sm" variant="destructive" onClick={handleDelete} disabled={saving} className="h-7 text-xs px-2">
+                      {saving ? "삭제 중..." : "확인"}
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => setConfirmDelete(false)} disabled={saving} className="h-7 text-xs px-2">
+                      취소
+                    </Button>
+                  </div>
+                ) : (
+                  <>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 text-xs px-2 text-muted-foreground"
+                      onClick={() => setEditing(true)}
+                    >
+                      수정
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="h-7 text-xs px-2 text-muted-foreground"
+                      onClick={() => setConfirmDelete(true)}
+                    >
+                      삭제
+                    </Button>
+                  </>
+                )}
               </div>
-            ) : (
-              <>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-7 text-xs px-2 text-muted-foreground"
-                  onClick={() => setEditing(true)}
-                >
-                  수정
-                </Button>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-7 text-xs px-2 text-muted-foreground"
-                  onClick={() => setConfirmDelete(true)}
-                >
-                  삭제
-                </Button>
-              </>
             )}
           </div>
         )}
