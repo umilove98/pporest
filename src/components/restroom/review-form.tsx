@@ -1,12 +1,57 @@
 "use client";
 
-import { useRef, useState, useEffect, useCallback } from "react";
+import { useRef, useState, useEffect } from "react";
 import { Camera, Check, X, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { StarRating } from "./star-rating";
 import { createReview, analyzeAndUpdateSentiment, uploadPhoto, moderatePhoto, moderateComment } from "@/lib/api";
 import { useAuth } from "@/components/auth/auth-provider";
+
+const PHOTO_CHECK_MSGS = [
+  "사진을 확인하고 있어요...",
+  "화장실 관련 사진인지 분석 중...",
+  "부적절한 내용이 없는지 검사 중...",
+  "거의 다 됐어요!",
+];
+
+const COMMENT_CHECK_MSGS = [
+  "리뷰 내용을 확인하고 있어요...",
+  "부적절한 표현이 없는지 검토 중...",
+  "커뮤니티 가이드라인 준수 여부 확인 중...",
+  "거의 다 됐어요!",
+];
+
+const PHOTO_UPLOAD_MSGS = [
+  "사진을 업로드하고 있어요...",
+  "서버에 사진을 전송 중...",
+  "잠시만 기다려주세요...",
+];
+
+const SUBMIT_MSGS = [
+  "리뷰를 등록하고 있어요...",
+  "소중한 후기를 저장 중...",
+];
+
+function useRotatingMessage(active: boolean, messages: string[]) {
+  const [msg, setMsg] = useState("");
+
+  useEffect(() => {
+    if (!active) {
+      setMsg("");
+      return;
+    }
+    let idx = 0;
+    setMsg(messages[0]);
+    const timer = setInterval(() => {
+      idx = (idx + 1) % messages.length;
+      setMsg(messages[idx]);
+    }, 1500);
+    return () => clearInterval(timer);
+  }, [active, messages]);
+
+  return msg;
+}
 
 interface ReviewFormProps {
   restroomId: string;
@@ -27,32 +72,23 @@ export function ReviewForm({ restroomId, onSubmit }: ReviewFormProps) {
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [photoChecking, setPhotoChecking] = useState(false);
   const [photoError, setPhotoError] = useState("");
-  const [checkingMsg, setCheckingMsg] = useState("");
 
-  const CHECKING_MESSAGES = useCallback(() => [
-    "사진을 확인하고 있어요...",
-    "화장실 관련 사진인지 분석 중...",
-    "부적절한 내용이 없는지 검사 중...",
-    "거의 다 됐어요!",
-  ], []);
+  // 등록 단계 상태
+  const [submitPhase, setSubmitPhase] = useState<"comment" | "photo" | "save" | null>(null);
 
-  useEffect(() => {
-    if (!photoChecking) return;
-    let idx = 0;
-    const msgs = CHECKING_MESSAGES();
-    setCheckingMsg(msgs[0]);
-    const timer = setInterval(() => {
-      idx = (idx + 1) % msgs.length;
-      setCheckingMsg(msgs[idx]);
-    }, 1500);
-    return () => clearInterval(timer);
-  }, [photoChecking, CHECKING_MESSAGES]);
+  const photoCheckMsg = useRotatingMessage(photoChecking, PHOTO_CHECK_MSGS);
+  const submitMsg = useRotatingMessage(
+    submitPhase !== null,
+    submitPhase === "comment" ? COMMENT_CHECK_MSGS
+      : submitPhase === "photo" ? PHOTO_UPLOAD_MSGS
+      : submitPhase === "save" ? SUBMIT_MSGS
+      : SUBMIT_MSGS,
+  );
 
   const handlePhotoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // 파일 크기 제한 (5MB)
     if (file.size > 5 * 1024 * 1024) {
       setPhotoError("사진 크기는 5MB 이하만 가능합니다.");
       if (fileInputRef.current) fileInputRef.current.value = "";
@@ -63,7 +99,6 @@ export function ReviewForm({ restroomId, onSubmit }: ReviewFormProps) {
     setPhotoChecking(true);
 
     try {
-      // AI 사진 검증
       const result = await moderatePhoto(file);
       if (!result.allowed) {
         setPhotoError(result.reason || "부적절한 사진입니다.");
@@ -71,7 +106,6 @@ export function ReviewForm({ restroomId, onSubmit }: ReviewFormProps) {
         return;
       }
 
-      // 검증 통과 → 미리보기 생성
       setPhotoFile(file);
       const reader = new FileReader();
       reader.onload = (ev) => setPhotoPreview(ev.target?.result as string);
@@ -98,23 +132,28 @@ export function ReviewForm({ restroomId, onSubmit }: ReviewFormProps) {
     setError("");
 
     try {
-      // 리뷰 내용 검증 (성희롱/차별 발언 차단)
+      // 1단계: 리뷰 내용 검증
       if (comment.trim()) {
+        setSubmitPhase("comment");
         const modResult = await moderateComment(comment);
         if (!modResult.allowed) {
           setError(modResult.reason || "부적절한 내용이 포함되어 있습니다.");
           setLoading(false);
+          setSubmitPhase(null);
           return;
         }
       }
 
       if (user) {
-        // 사진이 있으면 먼저 업로드
+        // 2단계: 사진 업로드
         let photoUrl: string | undefined;
         if (photoFile) {
+          setSubmitPhase("photo");
           photoUrl = await uploadPhoto(photoFile, `reviews/${restroomId}`);
         }
 
+        // 3단계: 리뷰 저장
+        setSubmitPhase("save");
         const created = await createReview({
           restroom_id: restroomId,
           user_id: user.id,
@@ -124,7 +163,6 @@ export function ReviewForm({ restroomId, onSubmit }: ReviewFormProps) {
           has_photo: !!photoFile,
           photo_url: photoUrl,
         });
-        // 감성 분석은 비동기로 — 리뷰 등록 UX에 영향 없음
         analyzeAndUpdateSentiment(created.id, comment, rating);
       }
       setSubmitted(true);
@@ -139,6 +177,7 @@ export function ReviewForm({ restroomId, onSubmit }: ReviewFormProps) {
       setError("리뷰 등록에 실패했습니다. 다시 시도해주세요.");
     } finally {
       setLoading(false);
+      setSubmitPhase(null);
     }
   };
 
@@ -227,16 +266,26 @@ export function ReviewForm({ restroomId, onSubmit }: ReviewFormProps) {
         )}
 
         {photoChecking && (
-          <p className="mt-1.5 text-xs text-muted-foreground animate-pulse">{checkingMsg}</p>
+          <p className="mt-1.5 text-xs text-muted-foreground animate-pulse">{photoCheckMsg}</p>
         )}
         {photoError && <p className="mt-1 text-xs text-red-500">{photoError}</p>}
       </div>
 
       {error && <p className="text-sm text-red-500">{error}</p>}
 
-      <Button type="submit" className="w-full" disabled={rating === 0 || loading || photoChecking || !!photoError}>
-        {loading ? "등록 중..." : "리뷰 등록하기"}
-      </Button>
+      <div>
+        <Button type="submit" className="w-full" disabled={rating === 0 || loading || photoChecking || !!photoError}>
+          {loading ? (
+            <span className="flex items-center gap-2">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              등록 중...
+            </span>
+          ) : "리뷰 등록하기"}
+        </Button>
+        {loading && submitMsg && (
+          <p className="mt-1.5 text-center text-xs text-muted-foreground animate-pulse">{submitMsg}</p>
+        )}
+      </div>
     </form>
   );
 }
