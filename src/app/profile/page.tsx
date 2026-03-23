@@ -35,9 +35,9 @@ export default function ProfilePage() {
     setReviewsLoading(true);
     setPrefsLoading(true);
 
-    // 3개 요청 동시 시작
-    const reviewsP = getReviewsByUserId(user.id);
-    const adminP = checkIsAdmin();
+    // 3개 요청 동시 시작 (본인 프로필 전달로 DB 재조회 스킵, userId로 getUser() 중복 제거)
+    const reviewsP = getReviewsByUserId(user.id, nickname ? { nickname, avatarUrl: avatarUrl ?? null } : undefined);
+    const adminP = checkIsAdmin(user.id);
     const prefsP = getUserPreferences(user.id);
 
     reviewsP

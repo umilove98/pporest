@@ -805,7 +805,10 @@ export async function deleteReview(reviewId: string): Promise<void> {
 /**
  * 특정 사용자의 리뷰 목록 (에러 시 빈 배열)
  */
-export async function getReviewsByUserId(userId: string): Promise<Review[]> {
+export async function getReviewsByUserId(
+  userId: string,
+  profile?: { nickname: string; avatarUrl: string | null },
+): Promise<Review[]> {
   try {
     const { data, error } = await supabase
       .from("reviews")
@@ -816,19 +819,28 @@ export async function getReviewsByUserId(userId: string): Promise<Review[]> {
     if (error || !data || data.length === 0) return [];
 
     const reviews = (data ?? []) as Review[];
-
-    // 화장실 이름 매핑
     const restroomIds = Array.from(new Set(reviews.map((r) => r.restroom_id)));
-    const [pubRes, userRes] = await Promise.all([
+
+    // 화장실 이름 + 프로필을 병렬 조회 (기존: 이름 → 프로필 직렬)
+    const [pubRes, userRes, enriched] = await Promise.all([
       supabase.from("public_restrooms").select("id, name").in("id", restroomIds),
       supabase.from("user_restrooms").select("id, name").in("id", restroomIds),
+      // 본인 프로필이 넘어오면 DB 재조회 스킵
+      profile
+        ? Promise.resolve(reviews.map((r) => ({
+            ...r,
+            user_name: profile.nickname,
+            avatar_url: profile.avatarUrl,
+          })))
+        : enrichReviewsWithProfiles(reviews),
     ]);
+
     const nameMap = new Map<string, string>();
     (pubRes.data ?? []).forEach((r: { id: string; name: string }) => nameMap.set(r.id, r.name));
     (userRes.data ?? []).forEach((r: { id: string; name: string }) => nameMap.set(r.id, r.name));
-    reviews.forEach((r) => { r.restroom_name = nameMap.get(r.restroom_id); });
+    enriched.forEach((r) => { r.restroom_name = nameMap.get(r.restroom_id); });
 
-    return enrichReviewsWithProfiles(reviews);
+    return enriched;
   } catch {
     return [];
   }
@@ -893,14 +905,18 @@ export async function createEditRequest(req: {
 /**
  * 현재 로그인한 유저가 관리자인지 확인
  */
-export async function checkIsAdmin(): Promise<boolean> {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return false;
+export async function checkIsAdmin(userId?: string): Promise<boolean> {
+  let uid = userId;
+  if (!uid) {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return false;
+    uid = user.id;
+  }
 
   const { data, error } = await supabase
     .from("admin_users")
     .select("user_id")
-    .eq("user_id", user.id)
+    .eq("user_id", uid)
     .maybeSingle();
 
   if (error) return false;
