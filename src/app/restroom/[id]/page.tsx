@@ -126,8 +126,59 @@ export default function RestroomDetailPage() {
 
   if (loading) {
     return (
-      <div className="flex h-screen items-center justify-center">
-        <p className="text-sm text-muted-foreground">로딩 중...</p>
+      <div className="flex flex-col">
+        <header className="sticky top-0 z-40 flex items-center gap-2 border-b bg-background px-2 py-3">
+          <Button variant="ghost" size="icon" onClick={() => router.back()}>
+            <ChevronLeft className="h-5 w-5" />
+          </Button>
+          <div className="h-5 w-40 animate-pulse rounded bg-muted" />
+        </header>
+        <div className="px-4 pt-4 space-y-4">
+          {/* 별점 + 주소 스켈레톤 */}
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <div className="h-5 w-28 animate-pulse rounded bg-muted" />
+              <div className="h-4 w-16 animate-pulse rounded bg-muted" />
+            </div>
+            <div className="h-4 w-48 animate-pulse rounded bg-muted" />
+            <div className="h-4 w-32 animate-pulse rounded bg-muted" />
+            <div className="mt-3 flex gap-3">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="h-5 w-14 animate-pulse rounded bg-muted" />
+              ))}
+            </div>
+          </div>
+          {/* 사진 스켈레톤 */}
+          <div>
+            <div className="h-4 w-12 animate-pulse rounded bg-muted mb-2" />
+            <div className="grid grid-cols-3 gap-2">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="aspect-square animate-pulse rounded-lg bg-muted" />
+              ))}
+            </div>
+          </div>
+          {/* 안전 확인 스켈레톤 */}
+          <div className="h-20 animate-pulse rounded-xl bg-muted" />
+          {/* 리뷰 스켈레톤 */}
+          <div>
+            <div className="h-4 w-16 animate-pulse rounded bg-muted mb-3" />
+            {[1, 2].map((i) => (
+              <div key={i} className="mb-3 animate-pulse rounded-lg border p-4">
+                <div className="flex items-center gap-2">
+                  <div className="h-8 w-8 rounded-full bg-muted" />
+                  <div className="flex-1 space-y-1.5">
+                    <div className="h-3 w-20 rounded bg-muted" />
+                    <div className="h-3 w-24 rounded bg-muted" />
+                  </div>
+                </div>
+                <div className="mt-3 space-y-1.5">
+                  <div className="h-3 w-full rounded bg-muted" />
+                  <div className="h-3 w-2/3 rounded bg-muted" />
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
     );
   }
