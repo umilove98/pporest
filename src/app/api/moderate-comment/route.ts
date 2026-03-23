@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GEMINI_MODEL = "gemini-2.0-flash-lite";
-const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
+const GEMINI_URL = `https://generativelanguage.googleapis.com/v1/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
 
 export async function POST(req: NextRequest) {
   if (!GEMINI_API_KEY) {
@@ -45,8 +45,8 @@ Respond with ONLY a JSON object (no markdown): {"allowed": true/false, "reason":
 
     if (!res.ok) {
       const err = await res.text();
-      console.error("Gemini comment moderation error:", err);
-      return NextResponse.json({ allowed: true, reason: "검증 서비스 오류" });
+      console.error("Gemini comment moderation error:", res.status, err);
+      return NextResponse.json({ allowed: false, reason: "검증 서비스 오류로 등록이 보류됩니다" });
     }
 
     const data = await res.json();
@@ -62,10 +62,10 @@ Respond with ONLY a JSON object (no markdown): {"allowed": true/false, "reason":
       });
     } catch {
       console.error("Failed to parse comment moderation response:", raw);
-      return NextResponse.json({ allowed: true, reason: "응답 파싱 실패" });
+      return NextResponse.json({ allowed: false, reason: "검증 응답 처리 실패로 등록이 보류됩니다" });
     }
   } catch (err) {
     console.error("Comment moderation failed:", err);
-    return NextResponse.json({ allowed: true, reason: "검증 실패" });
+    return NextResponse.json({ allowed: false, reason: "검증 서비스 연결 실패로 등록이 보류됩니다" });
   }
 }
