@@ -117,4 +117,7 @@ export interface Review {
   avatar_url?: string | null;
   sentiment?: ReviewSentiment | null;
   created_at: string;
+  // 리뷰 작성 시점 스냅샷 (DB 저장)
+  user_avg_rating?: number | null;
+  user_top_preferences?: string[] | null;
 }
