@@ -33,6 +33,19 @@ export default function RestroomDetailPage() {
   const [alreadyChecked, setAlreadyChecked] = useState(false);
   const [safetyAnim, setSafetyAnim] = useState(false);
 
+  const refreshData = async () => {
+    try {
+      const [found, revs] = await Promise.all([
+        getRestroomById(id),
+        getReviewsByKey(id),
+      ]);
+      setRestroom(found);
+      setReviews(revs);
+    } catch {
+      // 새로고침 실패 시 무시
+    }
+  };
+
   useEffect(() => {
     async function fetchData() {
       try {
@@ -410,7 +423,7 @@ export default function RestroomDetailPage() {
           </div>
           <div className="flex flex-col gap-3">
             {reviews.map((review) => (
-              <ReviewCard key={review.id} review={review} />
+              <ReviewCard key={review.id} review={review} onUpdated={refreshData} />
             ))}
             {reviews.length === 0 && (
               <p className="py-8 text-center text-sm text-muted-foreground">
