@@ -1,6 +1,102 @@
 import { supabase } from "./supabase";
 import { EditRequest, PublicRestroom, Restroom, Review, UserRestroom } from "./types";
 
+// === 유저 프로필 (닉네임) ===
+
+/**
+ * 유저 닉네임 조회 — 없으면 user_metadata에서 가져와 프로필 생성
+ */
+export async function getOrCreateNickname(userId: string): Promise<string> {
+  // 1) 기존 프로필 조회
+  const { data: existing } = await supabase
+    .from("user_profiles")
+    .select("nickname")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (existing?.nickname) return existing.nickname;
+
+  // 2) 가입 시 설정한 닉네임을 user_metadata에서 가져옴
+  const { data: { user } } = await supabase.auth.getUser();
+  const metaNickname = user?.user_metadata?.nickname;
+
+  // fallback: 랜덤 닉네임 생성
+  const { generateRandomNickname } = await import("./nickname");
+  const nickname = metaNickname || generateRandomNickname();
+
+  // 3) 프로필 생성
+  const { data: created, error: insertError } = await supabase
+    .from("user_profiles")
+    .insert({ user_id: userId, nickname })
+    .select("nickname")
+    .single();
+
+  if (insertError) {
+    // 동시 insert 충돌 또는 unique 위반 시 다시 조회
+    const { data: retry } = await supabase
+      .from("user_profiles")
+      .select("nickname")
+      .eq("user_id", userId)
+      .maybeSingle();
+    return retry?.nickname ?? nickname;
+  }
+
+  return created.nickname;
+}
+
+/**
+ * 유저 닉네임 조회 (읽기 전용, 없으면 null)
+ */
+export async function getNickname(userId: string): Promise<string | null> {
+  const { data } = await supabase
+    .from("user_profiles")
+    .select("nickname")
+    .eq("user_id", userId)
+    .maybeSingle();
+  return data?.nickname ?? null;
+}
+
+/**
+ * 프로필 사진 URL 조회
+ */
+export async function getAvatarUrl(userId: string): Promise<string | null> {
+  const { data } = await supabase
+    .from("user_profiles")
+    .select("avatar_url")
+    .eq("user_id", userId)
+    .maybeSingle();
+  return data?.avatar_url ?? null;
+}
+
+/**
+ * 프로필 사진 업로드 및 URL 저장
+ */
+export async function updateAvatar(userId: string, file: File): Promise<string> {
+  const ext = file.name.split(".").pop() || "jpg";
+  const fileName = `avatars/${userId}/${Date.now()}.${ext}`;
+
+  const { error: uploadError } = await supabase.storage
+    .from("restroom-photos")
+    .upload(fileName, file, { contentType: file.type, upsert: true });
+
+  if (uploadError) throw uploadError;
+
+  const { data } = supabase.storage
+    .from("restroom-photos")
+    .getPublicUrl(fileName);
+
+  const avatarUrl = data.publicUrl;
+
+  const { error: updateError } = await supabase
+    .from("user_profiles")
+    .update({ avatar_url: avatarUrl })
+    .eq("user_id", userId);
+
+  if (updateError) throw updateError;
+
+  return avatarUrl;
+}
+
 // === 공공 화장실 DB 조회 ===
 
 /**
@@ -121,16 +217,45 @@ export async function getUserRestroomById(id: string): Promise<UserRestroom | nu
 }
 
 /**
- * ID로 화장실 조회 (공공 → 유저 순으로 탐색, 통합 Restroom 반환)
+ * 특정 화장실의 리뷰 통계 (평균 별점, 건수) 실시간 계산
+ */
+export async function getReviewStats(restroomId: string): Promise<{ rating: number; review_count: number }> {
+  const { data, error } = await supabase
+    .from("reviews")
+    .select("rating")
+    .eq("restroom_id", restroomId);
+
+  if (error || !data || data.length === 0) {
+    return { rating: 0, review_count: 0 };
+  }
+
+  const sum = data.reduce((acc, r) => acc + r.rating, 0);
+  return {
+    rating: Math.round((sum / data.length) * 10) / 10,
+    review_count: data.length,
+  };
+}
+
+/**
+ * ID로 화장실 조회 (공공 → 유저 순으로 탐색, 통합 Restroom 반환 + 리뷰 통계 포함)
  */
 export async function getRestroomById(id: string): Promise<Restroom | null> {
   // 공공 화장실 먼저 조회
   const pub = await getPublicRestroomById(id);
-  if (pub) return toRestroom(pub);
+  if (pub) {
+    const stats = await getReviewStats(id);
+    return toRestroom(pub, stats);
+  }
 
   // 유저 등록 화장실 조회
-  const user = await getUserRestroomById(id);
-  if (user) return userRestroomToRestroom(user);
+  const ur = await getUserRestroomById(id);
+  if (ur) {
+    const stats = await getReviewStats(id);
+    const restroom = userRestroomToRestroom(ur);
+    restroom.rating = stats.rating;
+    restroom.review_count = stats.review_count;
+    return restroom;
+  }
 
   return null;
 }
