@@ -131,26 +131,13 @@ export async function updateAvatar(userId: string, file: File): Promise<string> 
   // 브라우저 캐시 방지용 쿼리 파라미터
   const avatarUrl = `${data.publicUrl}?t=${Date.now()}`;
 
-  // 기존 프로필이 있으면 update, 없으면 닉네임 포함 insert
-  const { data: profile } = await supabase
+  // avatar_url만 업데이트 (프로필은 가입 시 이미 생성됨)
+  const { error: updateError } = await supabase
     .from("user_profiles")
-    .select("user_id")
-    .eq("user_id", userId)
-    .maybeSingle();
+    .update({ avatar_url: avatarUrl })
+    .eq("user_id", userId);
 
-  if (profile) {
-    const { error: updateError } = await supabase
-      .from("user_profiles")
-      .update({ avatar_url: avatarUrl })
-      .eq("user_id", userId);
-    if (updateError) throw new Error(`프로필 저장 실패: ${updateError.message}`);
-  } else {
-    const nickname = await getOrCreateNickname(userId);
-    const { error: insertError } = await supabase
-      .from("user_profiles")
-      .insert({ user_id: userId, nickname, avatar_url: avatarUrl });
-    if (insertError) throw new Error(`프로필 저장 실패: ${insertError.message}`);
-  }
+  if (updateError) throw new Error(`프로필 저장 실패: ${updateError.message}`);
 
   return avatarUrl;
 }
