@@ -652,17 +652,26 @@ export async function createReview(review: {
     getUserTopPreferences(review.user_id),
   ]);
 
+  console.log("[createReview] snapshot →", { avgRating, topPrefs });
+
+  const insertPayload = {
+    ...review,
+    user_avg_rating: avgRating,
+    user_top_preferences: topPrefs.length > 0 ? topPrefs : null,
+  };
+  console.log("[createReview] insert payload →", insertPayload);
+
   const { data, error } = await supabase
     .from("reviews")
-    .insert({
-      ...review,
-      user_avg_rating: avgRating,
-      user_top_preferences: topPrefs.length > 0 ? topPrefs : null,
-    })
+    .insert(insertPayload)
     .select()
     .single();
 
-  if (error) throw error;
+  if (error) {
+    console.error("[createReview] insert error →", error);
+    throw error;
+  }
+  console.log("[createReview] saved →", data);
   return data as Review;
 }
 
