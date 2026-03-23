@@ -6,9 +6,15 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { StarRating } from "./star-rating";
-import { Review } from "@/lib/types";
+import { Review, ReviewSentiment } from "@/lib/types";
 import { useAuth } from "@/components/auth/auth-provider";
 import { updateReview, deleteReview } from "@/lib/api";
+
+const SENTIMENT_LABELS: Record<ReviewSentiment, { text: string; className: string }> = {
+  positive: { text: "긍정", className: "bg-emerald-100 text-emerald-700" },
+  negative: { text: "부정", className: "bg-red-100 text-red-700" },
+  neutral: { text: "중립", className: "bg-slate-100 text-slate-600" },
+};
 
 function formatDateTime(iso: string): string {
   const d = new Date(iso);
@@ -80,11 +86,18 @@ export function ReviewCard({ review, onUpdated }: ReviewCardProps) {
               <span className="text-sm font-medium">{review.user_name}</span>
               <span className="text-xs text-muted-foreground">{formatDateTime(review.created_at)}</span>
             </div>
-            {editing ? (
-              <StarRating rating={editRating} size="sm" onChange={setEditRating} />
-            ) : (
-              <StarRating rating={review.rating} />
-            )}
+            <div className="flex items-center gap-1.5">
+              {editing ? (
+                <StarRating rating={editRating} size="sm" onChange={setEditRating} />
+              ) : (
+                <StarRating rating={review.rating} />
+              )}
+              {!editing && review.sentiment && (
+                <span className={`inline-flex rounded-full px-1.5 py-0.5 text-[10px] font-medium ${SENTIMENT_LABELS[review.sentiment].className}`}>
+                  {SENTIMENT_LABELS[review.sentiment].text}
+                </span>
+              )}
+            </div>
           </div>
         </div>
 

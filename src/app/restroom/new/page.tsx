@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAuth } from "@/components/auth/auth-provider";
-import { createUserRestroom, uploadPhoto } from "@/lib/api";
+import { createUserRestroom, uploadPhoto, moderatePhoto } from "@/lib/api";
 
 const FACILITY_OPTIONS = [
   { key: "has_disabled_access", label: "장애인 접근 가능" },
@@ -189,15 +189,44 @@ export default function NewRestroomPage() {
     setFacilities((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
-  const handlePhotoAdd = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const [moderating, setModerating] = useState(false);
+  const [moderationError, setModerationError] = useState("");
+
+  const handlePhotoAdd = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files) return;
-    const newPhotos = Array.from(files).slice(0, 5 - photos.length).map((file) => ({
-      file,
-      preview: URL.createObjectURL(file),
-    }));
-    setPhotos((prev) => [...prev, ...newPhotos].slice(0, 5));
     if (fileInputRef.current) fileInputRef.current.value = "";
+
+    const candidates = Array.from(files).slice(0, 5 - photos.length);
+    if (candidates.length === 0) return;
+
+    setModerating(true);
+    setModerationError("");
+
+    const approved: { file: File; preview: string }[] = [];
+    const rejected: string[] = [];
+
+    for (const file of candidates) {
+      try {
+        const result = await moderatePhoto(file);
+        if (result.allowed) {
+          approved.push({ file, preview: URL.createObjectURL(file) });
+        } else {
+          rejected.push(result.reason || "부적절한 사진");
+        }
+      } catch {
+        // 검증 실패 시 허용 (서비스 중단 방지)
+        approved.push({ file, preview: URL.createObjectURL(file) });
+      }
+    }
+
+    if (approved.length > 0) {
+      setPhotos((prev) => [...prev, ...approved].slice(0, 5));
+    }
+    if (rejected.length > 0) {
+      setModerationError(`${rejected.length}장의 사진이 차단되었습니다: ${rejected[0]}`);
+    }
+    setModerating(false);
   };
 
   const removePhoto = (index: number) => {
@@ -571,6 +600,15 @@ export default function NewRestroomPage() {
               onChange={handlePhotoAdd}
               className="hidden"
             />
+            {moderating && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span>AI가 사진을 검사하는 중...</span>
+              </div>
+            )}
+            {moderationError && (
+              <p className="text-sm text-red-500">{moderationError}</p>
+            )}
           </div>
         )}
 

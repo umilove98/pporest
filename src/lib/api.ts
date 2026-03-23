@@ -663,6 +663,48 @@ export async function getReviewsByUserId(userId: string): Promise<Review[]> {
   }
 }
 
+/**
+ * 리뷰 감성 분석 후 DB 업데이트 (비동기 — 실패해도 리뷰 등록에 영향 없음)
+ */
+export async function analyzeAndUpdateSentiment(
+  reviewId: string,
+  comment: string,
+  rating: number
+): Promise<void> {
+  try {
+    const res = await fetch("/api/analyze-sentiment", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ comment, rating }),
+    });
+    const { sentiment } = await res.json();
+    if (sentiment) {
+      await supabase
+        .from("reviews")
+        .update({ sentiment })
+        .eq("id", reviewId);
+    }
+  } catch (err) {
+    console.error("Sentiment analysis failed:", err);
+  }
+}
+
+/**
+ * 사진 적절성 검증 (Gemini Vision)
+ */
+export async function moderatePhoto(
+  file: File
+): Promise<{ allowed: boolean; reason: string }> {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const res = await fetch("/api/moderate-photo", {
+    method: "POST",
+    body: formData,
+  });
+  return res.json();
+}
+
 // === 수정 요청 ===
 
 /**

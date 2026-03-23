@@ -14,7 +14,7 @@ import { Input } from "@/components/ui/input";
 import { getRestroomById, getReviewsByKey, createEditRequest, getSafetyCount, checkSafety, hasCheckedSafetyToday, getUserPreferences, calculateTier } from "@/lib/api";
 import { TierBadge } from "@/components/preference/tier-badge";
 import { useAuth } from "@/components/auth/auth-provider";
-import { Restroom, Review, RestroomTier } from "@/lib/types";
+import { Restroom, Review, ReviewSentiment, RestroomTier } from "@/lib/types";
 import { getCachedTier, setCachedTier } from "@/lib/tier-cache";
 
 export default function RestroomDetailPage() {
@@ -35,6 +35,7 @@ export default function RestroomDetailPage() {
   const [alreadyChecked, setAlreadyChecked] = useState(false);
   const [safetyAnim, setSafetyAnim] = useState(false);
   const [tier, setTier] = useState<RestroomTier>(null);
+  const [sentimentFilter, setSentimentFilter] = useState<ReviewSentiment | "all">("all");
 
   const refreshData = async () => {
     try {
@@ -438,13 +439,55 @@ export default function RestroomDetailPage() {
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-sm font-semibold">리뷰 ({reviews.length})</h2>
           </div>
+
+          {/* 감성 필터 */}
+          {reviews.length > 0 && (
+            <div className="mb-3 flex gap-1.5">
+              {([
+                { key: "all" as const, label: "전체" },
+                { key: "positive" as const, label: "긍정" },
+                { key: "neutral" as const, label: "중립" },
+                { key: "negative" as const, label: "부정" },
+              ]).map(({ key, label }) => (
+                <Badge
+                  key={key}
+                  variant={sentimentFilter === key ? "default" : "outline"}
+                  className={`cursor-pointer text-xs ${
+                    sentimentFilter === key
+                      ? key === "positive" ? "bg-emerald-500 hover:bg-emerald-600"
+                        : key === "negative" ? "bg-red-500 hover:bg-red-600"
+                        : key === "neutral" ? "bg-slate-500 hover:bg-slate-600"
+                        : ""
+                      : ""
+                  }`}
+                  onClick={() => setSentimentFilter(key)}
+                >
+                  {label}
+                  {key !== "all" && (
+                    <span className="ml-1 opacity-70">
+                      {reviews.filter((r) => r.sentiment === key).length}
+                    </span>
+                  )}
+                </Badge>
+              ))}
+            </div>
+          )}
+
           <div className="flex flex-col gap-3">
-            {reviews.map((review) => (
-              <ReviewCard key={review.id} review={review} onUpdated={refreshData} />
-            ))}
+            {reviews
+              .filter((r) => sentimentFilter === "all" || r.sentiment === sentimentFilter)
+              .map((review) => (
+                <ReviewCard key={review.id} review={review} onUpdated={refreshData} />
+              ))}
             {reviews.length === 0 && (
               <p className="py-8 text-center text-sm text-muted-foreground">
                 아직 리뷰가 없습니다. 첫 리뷰를 남겨주세요!
+              </p>
+            )}
+            {reviews.length > 0 &&
+              reviews.filter((r) => sentimentFilter === "all" || r.sentiment === sentimentFilter).length === 0 && (
+              <p className="py-8 text-center text-sm text-muted-foreground">
+                해당 감성의 리뷰가 없습니다.
               </p>
             )}
           </div>

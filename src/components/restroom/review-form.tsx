@@ -5,7 +5,7 @@ import { Camera, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { StarRating } from "./star-rating";
-import { createReview } from "@/lib/api";
+import { createReview, analyzeAndUpdateSentiment } from "@/lib/api";
 import { useAuth } from "@/components/auth/auth-provider";
 
 interface ReviewFormProps {
@@ -30,7 +30,7 @@ export function ReviewForm({ restroomId, onSubmit }: ReviewFormProps) {
 
     try {
       if (user) {
-        await createReview({
+        const created = await createReview({
           restroom_id: restroomId,
           user_id: user.id,
           user_name: nickname || "익명",
@@ -38,6 +38,8 @@ export function ReviewForm({ restroomId, onSubmit }: ReviewFormProps) {
           comment,
           has_photo: photoAdded,
         });
+        // 감성 분석은 비동기로 — 리뷰 등록 UX에 영향 없음
+        analyzeAndUpdateSentiment(created.id, comment, rating);
       }
       setSubmitted(true);
       onSubmit?.();
