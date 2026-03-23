@@ -29,6 +29,8 @@ declare global {
           Places: new () => KakaoPlaces;
           Status: { OK: string };
         };
+        ZoomControl: new () => unknown;
+        ControlPosition: { RIGHT: unknown };
         event: {
           addListener: (target: unknown, type: string, handler: () => void) => void;
           removeListener: (target: unknown, type: string, handler: () => void) => void;
@@ -47,6 +49,7 @@ interface KakaoMap {
   setCenter: (latlng: unknown) => void;
   relayout: () => void;
   getBounds: () => KakaoBounds;
+  addControl: (control: unknown, position: unknown) => void;
 }
 
 interface KakaoMarker {
@@ -207,6 +210,10 @@ export function MapView({ restrooms, userLocation, className = "", onBoundsChang
     });
     mapInstanceRef.current = map;
     initializedRef.current = true;
+
+    // 확대/축소 컨트롤
+    const zoomControl = new kakao.maps.ZoomControl();
+    map.addControl(zoomControl, kakao.maps.ControlPosition.RIGHT);
 
     map.relayout();
 
