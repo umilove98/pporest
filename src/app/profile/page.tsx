@@ -202,6 +202,7 @@ export default function ProfilePage() {
                     await saveUserPreferences(prefs);
                     setPreferences(prefs);
                     setNeedsPreferenceSurvey(false);
+                    setShowPreferenceSurvey(false);
                   }}
                   compact
                 />
