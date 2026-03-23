@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft, MapPin, Clock, Accessibility, Baby, Droplets, Banknote, PenLine, CheckCircle, Bell, Video, DoorOpen, ShieldCheck } from "lucide-react";
@@ -18,6 +18,32 @@ import { useAuth } from "@/components/auth/auth-provider";
 import { Restroom, Review, ReviewSentiment, RestroomTier, UserPreferences } from "@/lib/types";
 
 export default function RestroomDetailPage() {
+  return (
+    <Suspense fallback={<DetailSkeleton />}>
+      <RestroomDetailContent />
+    </Suspense>
+  );
+}
+
+function DetailSkeleton() {
+  return (
+    <div className="flex flex-col">
+      <header className="sticky top-0 z-40 flex items-center gap-2 border-b bg-background px-2 py-3">
+        <div className="h-8 w-8" />
+        <div className="h-5 w-40 animate-pulse rounded bg-muted" />
+      </header>
+      <div className="px-4 pt-4 space-y-4">
+        <div className="space-y-2">
+          <div className="h-5 w-28 animate-pulse rounded bg-muted" />
+          <div className="h-4 w-48 animate-pulse rounded bg-muted" />
+        </div>
+        <div className="h-20 animate-pulse rounded-xl bg-muted" />
+      </div>
+    </div>
+  );
+}
+
+function RestroomDetailContent() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const searchParams = useSearchParams();

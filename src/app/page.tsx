@@ -18,11 +18,15 @@ const MAX_MARKERS = 30;
 
 const TIER_FILTERS: RestroomTier[] = ["S", "A", "B", "C"];
 
+// 페이지 이동 후 복귀 시 즉시 복원할 마지막 위치/주소 캐시 (모듈 스코프)
+let cachedLocation: { lat: number; lng: number } | null = null;
+let cachedAddress: string | null = null;
+
 export default function HomePage() {
   const { user } = useAuth();
-  const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null);
-  const [locationReady, setLocationReady] = useState(false);
-  const [currentAddress, setCurrentAddress] = useState<string | null>(null);
+  const [location, setLocation] = useState<{ lat: number; lng: number } | null>(cachedLocation);
+  const [locationReady, setLocationReady] = useState(!!cachedLocation);
+  const [currentAddress, setCurrentAddress] = useState<string | null>(cachedAddress);
   const [mapBounds, setMapBounds] = useState<MapBounds | null>(null);
   const [filteredMarkers, setFilteredMarkers] = useState<MarkerData[]>([]);
   const [visibleRestrooms, setVisibleRestrooms] = useState<Restroom[]>([]);
@@ -50,27 +54,32 @@ export default function HomePage() {
     getUserPreferences(user.id).then(setPreferences).catch(() => {});
   }, [user]);
 
-  // 1. 현재 위치 가져오기 — layout.tsx에서 이미 시작된 GPS 결과 활용
+  // 1. 현재 위치 가져오기 — 캐시 우선, 없으면 GPS
   useEffect(() => {
+    // 캐시가 있으면 이미 state에 반영됨 (useState 초기값) — GPS 스킵
+    if (cachedLocation) return;
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const geo = (window as any).__geo as { p: Promise<{ lat: number; lng: number } | null>; result?: { lat: number; lng: number } } | undefined;
 
+    const apply = (loc: { lat: number; lng: number }) => {
+      cachedLocation = loc;
+      setLocation(loc);
+      setLocationReady(true);
+    };
+
     if (geo) {
       if (geo.result) {
-        setLocation(geo.result);
-        setLocationReady(true);
+        apply(geo.result);
       } else {
         geo.p.then((loc) => {
-          if (loc) setLocation(loc);
-          setLocationReady(true);
+          if (loc) apply(loc);
+          else setLocationReady(true);
         });
       }
     } else if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          setLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-          setLocationReady(true);
-        },
+        (pos) => apply({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
         () => setLocationReady(true),
         { enableHighAccuracy: false, timeout: 3000, maximumAge: 300000 }
       );
@@ -88,6 +97,7 @@ export default function HomePage() {
       geocoder.coord2Address(location.lng, location.lat, (result, status) => {
         if (status === window.kakao.maps.services.Status.OK && result[0]) {
           const addr = result[0].road_address?.address_name || result[0].address.address_name;
+          cachedAddress = addr;
           setCurrentAddress(addr);
         }
       });
