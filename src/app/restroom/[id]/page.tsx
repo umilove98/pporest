@@ -355,7 +355,7 @@ export default function RestroomDetailPage() {
         {/* Photos */}
         <div>
           <h2 className="mb-2 text-sm font-semibold">사진</h2>
-          <PhotoGrid count={6} />
+          <PhotoGrid photos={restroom.photo_urls ?? []} />
         </div>
 
         <Separator />
