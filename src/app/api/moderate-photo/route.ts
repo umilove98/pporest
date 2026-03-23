@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
+import { GoogleGenAI } from "@google/genai";
 
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-const GEMINI_MODEL = "gemini-2.0-flash-lite";
-const GEMINI_URL = `https://generativelanguage.googleapis.com/v1/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
+const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 export async function POST(req: NextRequest) {
-  if (!GEMINI_API_KEY) {
+  if (!process.env.GEMINI_API_KEY) {
     return NextResponse.json(
       { error: "GEMINI_API_KEY not configured" },
       { status: 500 }
@@ -45,42 +44,26 @@ ALLOW the image if:
 Respond with ONLY a JSON object (no markdown): {"allowed": true/false, "reason": "brief reason in Korean"}`;
 
   try {
-    const res = await fetch(GEMINI_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [
-          {
-            parts: [
-              { text: prompt },
-              {
-                inlineData: {
-                  mimeType,
-                  data: base64,
-                },
-              },
-            ],
-          },
-        ],
-        generationConfig: {
-          temperature: 0,
-          maxOutputTokens: 100,
+    const response = await ai.models.generateContent({
+      model: "gemini-2.0-flash-lite",
+      contents: [
+        {
+          role: "user",
+          parts: [
+            { text: prompt },
+            { inlineData: { mimeType, data: base64 } },
+          ],
         },
-      }),
+      ],
+      config: {
+        temperature: 0,
+        maxOutputTokens: 100,
+      },
     });
 
-    if (!res.ok) {
-      const err = await res.text();
-      console.error("Gemini moderation API error:", res.status, err);
-      return NextResponse.json({ allowed: false, reason: "검증 서비스 오류로 등록이 보류됩니다" });
-    }
-
-    const data = await res.json();
-    const raw =
-      data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? "";
+    const raw = response.text?.trim() ?? "";
 
     try {
-      // JSON 파싱 (마크다운 코드블록 제거)
       const cleaned = raw.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
       const result = JSON.parse(cleaned);
       return NextResponse.json({
