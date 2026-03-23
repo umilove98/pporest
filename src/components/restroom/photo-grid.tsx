@@ -1,7 +1,4 @@
-"use client";
-
 import { Camera } from "lucide-react";
-import Image from "next/image";
 
 export function PhotoGrid({ photos = [] }: { photos?: string[] }) {
   if (photos.length === 0) {
@@ -23,12 +20,11 @@ export function PhotoGrid({ photos = [] }: { photos?: string[] }) {
           key={i}
           className="relative aspect-square overflow-hidden rounded-md bg-muted"
         >
-          <Image
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
             src={url}
             alt={`사진 ${i + 1}`}
-            fill
-            className="object-cover"
-            sizes="25vw"
+            className="h-full w-full object-cover"
           />
           {i === visible.length - 1 && extra > 0 && (
             <div className="absolute inset-0 flex items-center justify-center rounded-md bg-black/50">
