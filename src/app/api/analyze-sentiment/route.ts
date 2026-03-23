@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GEMINI_MODEL = "gemini-2.0-flash-lite";
-const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
+const GEMINI_URL = `https://generativelanguage.googleapis.com/v1/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`;
 
 export async function POST(req: NextRequest) {
   if (!GEMINI_API_KEY) {
@@ -49,8 +49,11 @@ Rules:
 
     if (!res.ok) {
       const err = await res.text();
-      console.error("Gemini API error:", err);
-      return NextResponse.json({ sentiment: "neutral" });
+      console.error("Gemini API error:", res.status, err);
+      return NextResponse.json(
+        { error: `Gemini API error: ${res.status}` },
+        { status: 502 }
+      );
     }
 
     const data = await res.json();
@@ -65,6 +68,9 @@ Rules:
     return NextResponse.json({ sentiment });
   } catch (err) {
     console.error("Sentiment analysis failed:", err);
-    return NextResponse.json({ sentiment: "neutral" });
+    return NextResponse.json(
+      { error: "Sentiment analysis failed" },
+      { status: 502 }
+    );
   }
 }

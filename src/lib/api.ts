@@ -740,6 +740,10 @@ export async function analyzeAndUpdateSentiment(
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ comment, rating }),
     });
+    if (!res.ok) {
+      console.error("Sentiment API error:", res.status);
+      return;
+    }
     const { sentiment } = await res.json();
     if (sentiment) {
       await supabase
