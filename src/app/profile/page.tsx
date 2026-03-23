@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { User, Camera } from "lucide-react";
+import { User, Camera, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Card, CardContent } from "@/components/ui/card";
@@ -259,20 +259,42 @@ export default function ProfilePage() {
                   ))}
                 </div>
               ) : reviews.length > 0 ? (
-                <div className="flex flex-col gap-3 pb-4">
-                  {reviews.map((review) => (
-                    <div key={review.id}>
-                      {review.restroom_name && (
-                        <Link
-                          href={`/restroom/${review.restroom_id}`}
-                          className="mb-1 block text-xs text-emerald-600 hover:underline truncate"
-                        >
-                          {review.restroom_name}
-                        </Link>
-                      )}
-                      <ReviewCard review={review} onUpdated={handleReviewUpdated} />
-                    </div>
-                  ))}
+                <div className="flex flex-col gap-4 pb-4">
+                  {(() => {
+                    // 같은 화장실 리뷰를 그룹으로 묶기 (순서 유지)
+                    const groups: { restroomId: string; name?: string; items: Review[] }[] = [];
+                    const groupMap = new Map<string, number>();
+                    for (const review of reviews) {
+                      const idx = groupMap.get(review.restroom_id);
+                      if (idx !== undefined) {
+                        groups[idx].items.push(review);
+                      } else {
+                        groupMap.set(review.restroom_id, groups.length);
+                        groups.push({ restroomId: review.restroom_id, name: review.restroom_name, items: [review] });
+                      }
+                    }
+                    return groups.map((group) => (
+                      <div key={group.restroomId}>
+                        {group.name && (
+                          <Link
+                            href={`/restroom/${group.restroomId}`}
+                            className="mb-1.5 flex items-center gap-1 text-xs text-emerald-600 hover:underline"
+                          >
+                            <MapPin className="h-3 w-3" />
+                            <span className="truncate">{group.name}</span>
+                            {group.items.length > 1 && (
+                              <span className="text-muted-foreground">({group.items.length})</span>
+                            )}
+                          </Link>
+                        )}
+                        <div className="flex flex-col gap-2">
+                          {group.items.map((review) => (
+                            <ReviewCard key={review.id} review={review} onUpdated={handleReviewUpdated} />
+                          ))}
+                        </div>
+                      </div>
+                    ));
+                  })()}
                 </div>
               ) : (
                 <p className="py-8 text-center text-sm text-muted-foreground">
