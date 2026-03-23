@@ -130,6 +130,8 @@ NEXT_PUBLIC_KAKAO_MAP_API_KEY=<kakao-map-javascript-key>
 - **스키마 변경 시 `supabase/migrations/` 폴더에 새 SQL 파일 추가** (예: `009_xxx.sql`)
 - 번호는 기존 마이그레이션 다음 순번으로 매김
 - 운영 DB에는 해당 마이그레이션 파일만 실행
+- **DB 컬럼 데이터 타입 반드시 확인** — 코드에서 insert/update/where 할 때 해당 컬럼의 실제 DB 타입(uuid vs text, int vs bigint 등)과 입력 값의 형식이 일치하는지 반드시 검증할 것. 특히 여러 테이블에서 공유하는 ID 컬럼(예: `restroom_id`)은 참조하는 모든 테이블의 타입이 동일한지 확인
+- **에러 메시지에 DB 내부 정보 노출 금지** — Supabase 에러 메시지(테이블명, 컬럼 타입, SQL 에러코드 등)를 사용자 화면에 그대로 표시하지 말 것. console.error로만 기록하고, 사용자에게는 한국어로 된 일반적인 안내 메시지를 표시
 - **테이블/뷰 생성 시 반드시 GRANT 포함** — Supabase 마이그레이션으로 만든 테이블은 자동 GRANT가 안 됨
   - 조회용 테이블/뷰: `grant select on <table> to anon, authenticated;`
   - 로그인 유저 쓰기: `grant insert on <table> to authenticated;`
@@ -152,6 +154,14 @@ NEXT_PUBLIC_KAKAO_MAP_API_KEY=<kakao-map-javascript-key>
 | `011_add_user_profiles.sql` | user_profiles 테이블 (닉네임, 시퀀스, RLS, GRANT) |
 | `012_add_avatar_url.sql` | user_profiles에 avatar_url 컬럼 + update 정책 |
 | `013_create_avatars_bucket.sql` | avatars 버킷 (프로필 사진 전용) + RLS |
+| `014_fix_review_stats_view.sql` | review_stats 뷰 security_invoker 설정 |
+| `015_rpc_restrooms_with_stats.sql` | RPC: 화장실 + 리뷰통계 한방 조회 |
+| `016_fix_rpc_type_cast.sql` | RPC 타입 캐스팅 수정 |
+| `017_add_user_preferences.sql` | user_preferences 테이블 (취향 설정) |
+| `018_add_review_sentiment.sql` | reviews에 sentiment 컬럼 추가 |
+| `019_add_review_user_snapshot.sql` | reviews에 user_avg_rating, user_top_preferences 추가 |
+| `020_rpc_get_restroom_detail.sql` | RPC: 상세 페이지 한방 조회 |
+| `021_fix_reviews_restroom_id_type.sql` | reviews/safety_checks restroom_id uuid→text 변환 |
 
 ## Routes
 
