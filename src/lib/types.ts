@@ -103,6 +103,8 @@ export type PreferenceKey = "cleanliness" | "gender_separated" | "bidet" | "stal
 /** 화장실 개인 티어 */
 export type RestroomTier = "S" | "A" | "B" | "C" | null;
 
+export type ReviewSentiment = "positive" | "negative" | "neutral";
+
 export interface Review {
   id: string;
   restroom_id: string; // public_data_id 또는 user_restroom uuid
@@ -113,5 +115,6 @@ export interface Review {
   has_photo: boolean;
   photo_url?: string;
   avatar_url?: string | null;
+  sentiment?: ReviewSentiment | null;
   created_at: string;
 }
