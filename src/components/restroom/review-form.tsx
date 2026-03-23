@@ -8,6 +8,12 @@ import { StarRating } from "./star-rating";
 import { createReview, analyzeAndUpdateSentiment, uploadPhoto, moderatePhoto, moderateComment } from "@/lib/api";
 import { useAuth } from "@/components/auth/auth-provider";
 
+const PHOTO_UPLOAD_MSGS = [
+  "사진을 업로드하고 있어요...",
+  "서버에 사진을 전송 중...",
+  "잠시만 기다려주세요...",
+];
+
 const PHOTO_CHECK_MSGS = [
   "사진을 확인하고 있어요...",
   "화장실 관련 사진인지 분석 중...",
@@ -22,13 +28,7 @@ const COMMENT_CHECK_MSGS = [
   "거의 다 됐어요!",
 ];
 
-const PHOTO_UPLOAD_MSGS = [
-  "사진을 업로드하고 있어요...",
-  "서버에 사진을 전송 중...",
-  "잠시만 기다려주세요...",
-];
-
-const SUBMIT_MSGS = [
+const SAVE_MSGS = [
   "리뷰를 등록하고 있어요...",
   "소중한 후기를 저장 중...",
 ];
@@ -68,21 +68,21 @@ export function ReviewForm({ restroomId, onSubmit }: ReviewFormProps) {
 
   // 사진 관련 상태
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [photoUrl, setPhotoUrl] = useState<string | null>(null);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
-  const [photoChecking, setPhotoChecking] = useState(false);
+  const [photoUploading, setPhotoUploading] = useState(false);
   const [photoError, setPhotoError] = useState("");
 
   // 등록 단계 상태
-  const [submitPhase, setSubmitPhase] = useState<"comment" | "photo" | "save" | null>(null);
+  const [submitPhase, setSubmitPhase] = useState<"photo" | "comment" | "save" | null>(null);
 
-  const photoCheckMsg = useRotatingMessage(photoChecking, PHOTO_CHECK_MSGS);
+  const uploadMsg = useRotatingMessage(photoUploading, PHOTO_UPLOAD_MSGS);
   const submitMsg = useRotatingMessage(
     submitPhase !== null,
-    submitPhase === "comment" ? COMMENT_CHECK_MSGS
-      : submitPhase === "photo" ? PHOTO_UPLOAD_MSGS
-      : submitPhase === "save" ? SUBMIT_MSGS
-      : SUBMIT_MSGS,
+    submitPhase === "photo" ? PHOTO_CHECK_MSGS
+      : submitPhase === "comment" ? COMMENT_CHECK_MSGS
+      : SAVE_MSGS,
   );
 
   const handlePhotoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -96,29 +96,29 @@ export function ReviewForm({ restroomId, onSubmit }: ReviewFormProps) {
     }
 
     setPhotoError("");
-    setPhotoChecking(true);
+    setPhotoUploading(true);
 
     try {
-      const result = await moderatePhoto(file);
-      if (!result.allowed) {
-        setPhotoError(result.reason || "부적절한 사진입니다.");
-        if (fileInputRef.current) fileInputRef.current.value = "";
-        return;
-      }
-
-      setPhotoFile(file);
+      // 미리보기 생성
       const reader = new FileReader();
       reader.onload = (ev) => setPhotoPreview(ev.target?.result as string);
       reader.readAsDataURL(file);
+
+      // 업로드만 수행 (검증은 등록 시)
+      const url = await uploadPhoto(file, `reviews/${restroomId}`);
+      setPhotoUrl(url);
+      setPhotoFile(file);
     } catch {
-      setPhotoError("사진 검증에 실패했습니다. 다시 시도해주세요.");
+      setPhotoError("사진 업로드에 실패했습니다. 다시 시도해주세요.");
+      setPhotoPreview(null);
       if (fileInputRef.current) fileInputRef.current.value = "";
     } finally {
-      setPhotoChecking(false);
+      setPhotoUploading(false);
     }
   };
 
   const removePhoto = () => {
+    setPhotoUrl(null);
     setPhotoFile(null);
     setPhotoPreview(null);
     setPhotoError("");
@@ -132,27 +132,33 @@ export function ReviewForm({ restroomId, onSubmit }: ReviewFormProps) {
     setError("");
 
     try {
-      // 1단계: 리뷰 내용 검증
-      if (comment.trim()) {
-        setSubmitPhase("comment");
-        const modResult = await moderateComment(comment);
-        if (!modResult.allowed) {
-          setError(modResult.reason || "부적절한 내용이 포함되어 있습니다.");
+      // 1단계: 사진 검증 (있는 경우)
+      if (photoFile) {
+        setSubmitPhase("photo");
+        const photoResult = await moderatePhoto(photoFile);
+        if (!photoResult.allowed) {
+          setError(`등록 실패: ${photoResult.reason || "부적절한 사진입니다."}`);
+          removePhoto();
           setLoading(false);
           setSubmitPhase(null);
           return;
         }
       }
 
-      if (user) {
-        // 2단계: 사진 업로드
-        let photoUrl: string | undefined;
-        if (photoFile) {
-          setSubmitPhase("photo");
-          photoUrl = await uploadPhoto(photoFile, `reviews/${restroomId}`);
+      // 2단계: 리뷰 내용 검증
+      if (comment.trim()) {
+        setSubmitPhase("comment");
+        const modResult = await moderateComment(comment);
+        if (!modResult.allowed) {
+          setError(`등록 실패: ${modResult.reason || "부적절한 내용이 포함되어 있습니다."}`);
+          setLoading(false);
+          setSubmitPhase(null);
+          return;
         }
+      }
 
-        // 3단계: 리뷰 저장
+      // 3단계: 리뷰 저장
+      if (user) {
         setSubmitPhase("save");
         const created = await createReview({
           restroom_id: restroomId,
@@ -160,8 +166,8 @@ export function ReviewForm({ restroomId, onSubmit }: ReviewFormProps) {
           user_name: nickname || "익명",
           rating,
           comment,
-          has_photo: !!photoFile,
-          photo_url: photoUrl,
+          has_photo: !!photoUrl,
+          photo_url: photoUrl || undefined,
         });
         analyzeAndUpdateSentiment(created.id, comment, rating);
       }
@@ -224,7 +230,7 @@ export function ReviewForm({ restroomId, onSubmit }: ReviewFormProps) {
           accept="image/*"
           className="hidden"
           onChange={handlePhotoSelect}
-          disabled={photoChecking}
+          disabled={photoUploading}
         />
 
         {photoPreview ? (
@@ -249,12 +255,12 @@ export function ReviewForm({ restroomId, onSubmit }: ReviewFormProps) {
             variant="outline"
             className="gap-2"
             onClick={() => fileInputRef.current?.click()}
-            disabled={photoChecking}
+            disabled={photoUploading}
           >
-            {photoChecking ? (
+            {photoUploading ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin" />
-                사진 검증 중
+                사진 업로드 중
               </>
             ) : (
               <>
@@ -265,8 +271,8 @@ export function ReviewForm({ restroomId, onSubmit }: ReviewFormProps) {
           </Button>
         )}
 
-        {photoChecking && (
-          <p className="mt-1.5 text-xs text-muted-foreground animate-pulse">{photoCheckMsg}</p>
+        {photoUploading && (
+          <p className="mt-1.5 text-xs text-muted-foreground animate-pulse">{uploadMsg}</p>
         )}
         {photoError && <p className="mt-1 text-xs text-red-500">{photoError}</p>}
       </div>
@@ -274,7 +280,7 @@ export function ReviewForm({ restroomId, onSubmit }: ReviewFormProps) {
       {error && <p className="text-sm text-red-500">{error}</p>}
 
       <div>
-        <Button type="submit" className="w-full" disabled={rating === 0 || loading || photoChecking || !!photoError}>
+        <Button type="submit" className="w-full" disabled={rating === 0 || loading || photoUploading}>
           {loading ? (
             <span className="flex items-center gap-2">
               <Loader2 className="h-4 w-4 animate-spin" />
