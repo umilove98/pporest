@@ -5,7 +5,7 @@ import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { RestroomCard } from "@/components/restroom/restroom-card";
-import { searchPublicRestroomsDB, searchUserRestroomsDB, toRestroom, userRestroomToRestroom } from "@/lib/api";
+import { searchPublicRestroomsDB, searchUserRestroomsDB, toRestroom, userRestroomToRestroom, enrichRestroomsWithStats } from "@/lib/api";
 import { Restroom } from "@/lib/types";
 
 const filters = ["장애인 접근 가능", "기저귀 교환대", "24시간"];
@@ -29,10 +29,11 @@ export default function SearchPage() {
         searchPublicRestroomsDB(query, activeFilters),
         searchUserRestroomsDB(query, activeFilters),
       ]);
-      setRestrooms([
+      const merged = [
         ...publicResults.map((p) => toRestroom(p)),
         ...userResults.map((u) => userRestroomToRestroom(u)),
-      ]);
+      ];
+      setRestrooms(await enrichRestroomsWithStats(merged));
     } catch {
       setRestrooms([]);
     } finally {

@@ -262,23 +262,71 @@ export async function getUserRestroomById(id: string): Promise<UserRestroom | nu
 }
 
 /**
- * 특정 화장실의 리뷰 통계 (평균 별점, 건수) 실시간 계산
+ * 특정 화장실의 리뷰 통계 (review_stats 뷰 → fallback: reviews 직접 집계)
  */
 export async function getReviewStats(restroomId: string): Promise<{ rating: number; review_count: number }> {
+  // review_stats 뷰 사용 (DB에서 집계)
   const { data, error } = await supabase
+    .from("review_stats")
+    .select("rating, review_count")
+    .eq("restroom_id", restroomId)
+    .maybeSingle();
+
+  if (!error && data) {
+    return { rating: Number(data.rating), review_count: data.review_count };
+  }
+
+  // fallback: reviews 테이블 직접 집계
+  const { data: reviews, error: revErr } = await supabase
     .from("reviews")
     .select("rating")
     .eq("restroom_id", restroomId);
 
-  if (error || !data || data.length === 0) {
+  if (revErr || !reviews || reviews.length === 0) {
     return { rating: 0, review_count: 0 };
   }
 
-  const sum = data.reduce((acc, r) => acc + r.rating, 0);
+  const sum = reviews.reduce((acc, r) => acc + r.rating, 0);
   return {
-    rating: Math.round((sum / data.length) * 10) / 10,
-    review_count: data.length,
+    rating: Math.round((sum / reviews.length) * 10) / 10,
+    review_count: reviews.length,
   };
+}
+
+/**
+ * 여러 화장실의 리뷰 통계를 일괄 조회 (목록 표시용)
+ */
+export async function getReviewStatsBatch(restroomIds: string[]): Promise<Map<string, { rating: number; review_count: number }>> {
+  const map = new Map<string, { rating: number; review_count: number }>();
+  if (restroomIds.length === 0) return map;
+
+  const { data } = await supabase
+    .from("review_stats")
+    .select("restroom_id, rating, review_count")
+    .in("restroom_id", restroomIds);
+
+  for (const row of data ?? []) {
+    map.set(row.restroom_id, { rating: Number(row.rating), review_count: row.review_count });
+  }
+  return map;
+}
+
+/**
+ * Restroom 목록에 리뷰 통계를 일괄 매핑
+ */
+export async function enrichRestroomsWithStats(restrooms: Restroom[]): Promise<Restroom[]> {
+  if (restrooms.length === 0) return restrooms;
+
+  const ids = restrooms.map((r) => r.id);
+  const statsMap = await getReviewStatsBatch(ids);
+
+  return restrooms.map((r) => {
+    const stats = statsMap.get(r.id);
+    if (stats) {
+      return { ...r, rating: stats.rating, review_count: stats.review_count };
+    }
+    return r;
+  });
 }
 
 /**
