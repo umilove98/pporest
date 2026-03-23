@@ -120,4 +120,6 @@ export interface Review {
   // 리뷰 작성 시점 스냅샷 (DB 저장)
   user_avg_rating?: number | null;
   user_top_preferences?: string[] | null;
+  // 프로필 내 리뷰 표시용 (클라이언트에서 매핑)
+  restroom_name?: string;
 }
