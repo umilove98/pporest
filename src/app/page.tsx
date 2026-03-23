@@ -6,7 +6,7 @@ import { MapPin, Plus } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { MapView, MapBounds, MarkerData } from "@/components/restroom/map-view";
 import { RestroomCard } from "@/components/restroom/restroom-card";
-import { getPublicRestroomsByBounds, getUserRestroomsByBounds, toRestroom, userRestroomToRestroom } from "@/lib/api";
+import { getPublicRestroomsByBounds, getUserRestroomsByBounds, toRestroom, userRestroomToRestroom, enrichRestroomsWithStats } from "@/lib/api";
 import { Restroom } from "@/lib/types";
 import { getDistanceMeters, formatDistance } from "@/lib/utils";
 
@@ -81,11 +81,11 @@ export default function HomePage() {
         // 요청 사이에 bounds가 바뀌었으면 무시
         if (boundsRef.current !== mapBounds) return;
 
-        // 두 소스를 Restroom으로 통합
-        const allRestrooms: Restroom[] = [
+        // 두 소스를 Restroom으로 통합 + 리뷰 통계 반영
+        const allRestrooms: Restroom[] = await enrichRestroomsWithStats([
           ...publicData.map((p) => toRestroom(p)),
           ...userData.map((u) => userRestroomToRestroom(u)),
-        ];
+        ]);
 
         // 거리순 정렬 (위치 있을 때)
         if (location) {

@@ -95,5 +95,6 @@ export interface Review {
   comment: string;
   has_photo: boolean;
   photo_url?: string;
+  avatar_url?: string | null;
   created_at: string;
 }

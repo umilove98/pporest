@@ -131,26 +131,13 @@ export async function updateAvatar(userId: string, file: File): Promise<string> 
   // 브라우저 캐시 방지용 쿼리 파라미터
   const avatarUrl = `${data.publicUrl}?t=${Date.now()}`;
 
-  // 기존 프로필이 있으면 update, 없으면 닉네임 포함 insert
-  const { data: profile } = await supabase
+  // avatar_url만 업데이트 (프로필은 가입 시 이미 생성됨)
+  const { error: updateError } = await supabase
     .from("user_profiles")
-    .select("user_id")
-    .eq("user_id", userId)
-    .maybeSingle();
+    .update({ avatar_url: avatarUrl })
+    .eq("user_id", userId);
 
-  if (profile) {
-    const { error: updateError } = await supabase
-      .from("user_profiles")
-      .update({ avatar_url: avatarUrl })
-      .eq("user_id", userId);
-    if (updateError) throw new Error(`프로필 저장 실패: ${updateError.message}`);
-  } else {
-    const nickname = await getOrCreateNickname(userId);
-    const { error: insertError } = await supabase
-      .from("user_profiles")
-      .insert({ user_id: userId, nickname, avatar_url: avatarUrl });
-    if (insertError) throw new Error(`프로필 저장 실패: ${insertError.message}`);
-  }
+  if (updateError) throw new Error(`프로필 저장 실패: ${updateError.message}`);
 
   return avatarUrl;
 }
@@ -275,23 +262,71 @@ export async function getUserRestroomById(id: string): Promise<UserRestroom | nu
 }
 
 /**
- * 특정 화장실의 리뷰 통계 (평균 별점, 건수) 실시간 계산
+ * 특정 화장실의 리뷰 통계 (review_stats 뷰 → fallback: reviews 직접 집계)
  */
 export async function getReviewStats(restroomId: string): Promise<{ rating: number; review_count: number }> {
+  // review_stats 뷰 사용 (DB에서 집계)
   const { data, error } = await supabase
+    .from("review_stats")
+    .select("rating, review_count")
+    .eq("restroom_id", restroomId)
+    .maybeSingle();
+
+  if (!error && data) {
+    return { rating: Number(data.rating), review_count: data.review_count };
+  }
+
+  // fallback: reviews 테이블 직접 집계
+  const { data: reviews, error: revErr } = await supabase
     .from("reviews")
     .select("rating")
     .eq("restroom_id", restroomId);
 
-  if (error || !data || data.length === 0) {
+  if (revErr || !reviews || reviews.length === 0) {
     return { rating: 0, review_count: 0 };
   }
 
-  const sum = data.reduce((acc, r) => acc + r.rating, 0);
+  const sum = reviews.reduce((acc, r) => acc + r.rating, 0);
   return {
-    rating: Math.round((sum / data.length) * 10) / 10,
-    review_count: data.length,
+    rating: Math.round((sum / reviews.length) * 10) / 10,
+    review_count: reviews.length,
   };
+}
+
+/**
+ * 여러 화장실의 리뷰 통계를 일괄 조회 (목록 표시용)
+ */
+export async function getReviewStatsBatch(restroomIds: string[]): Promise<Map<string, { rating: number; review_count: number }>> {
+  const map = new Map<string, { rating: number; review_count: number }>();
+  if (restroomIds.length === 0) return map;
+
+  const { data } = await supabase
+    .from("review_stats")
+    .select("restroom_id, rating, review_count")
+    .in("restroom_id", restroomIds);
+
+  for (const row of data ?? []) {
+    map.set(row.restroom_id, { rating: Number(row.rating), review_count: row.review_count });
+  }
+  return map;
+}
+
+/**
+ * Restroom 목록에 리뷰 통계를 일괄 매핑
+ */
+export async function enrichRestroomsWithStats(restrooms: Restroom[]): Promise<Restroom[]> {
+  if (restrooms.length === 0) return restrooms;
+
+  const ids = restrooms.map((r) => r.id);
+  const statsMap = await getReviewStatsBatch(ids);
+
+  return restrooms.map((r) => {
+    const stats = statsMap.get(r.id);
+    if (stats) {
+      return { ...r, rating: stats.rating, review_count: stats.review_count };
+    }
+    return r;
+  });
 }
 
 /**
@@ -469,6 +504,32 @@ export async function createUserRestroom(restroom: {
 // === DB: 리뷰 ===
 
 /**
+ * 리뷰 목록에 user_profiles의 실시간 닉네임/아바타를 매핑
+ */
+async function enrichReviewsWithProfiles(reviews: Review[]): Promise<Review[]> {
+  if (reviews.length === 0) return reviews;
+
+  const userIds = Array.from(new Set(reviews.map((r) => r.user_id)));
+  const { data: profiles } = await supabase
+    .from("user_profiles")
+    .select("user_id, nickname, avatar_url")
+    .in("user_id", userIds);
+
+  const profileMap = new Map(
+    (profiles ?? []).map((p) => [p.user_id, p])
+  );
+
+  return reviews.map((r) => {
+    const profile = profileMap.get(r.user_id);
+    return {
+      ...r,
+      user_name: profile?.nickname ?? r.user_name,
+      avatar_url: profile?.avatar_url ?? null,
+    };
+  });
+}
+
+/**
  * 특정 화장실의 리뷰 목록
  */
 export async function getReviewsByKey(restroomKey: string): Promise<Review[]> {
@@ -480,7 +541,7 @@ export async function getReviewsByKey(restroomKey: string): Promise<Review[]> {
       .order("created_at", { ascending: false });
 
     if (error) return [];
-    return (data ?? []) as Review[];
+    return enrichReviewsWithProfiles((data ?? []) as Review[]);
   } catch {
     return [];
   }
@@ -520,7 +581,7 @@ export async function getReviewsByUserId(userId: string): Promise<Review[]> {
       .order("created_at", { ascending: false });
 
     if (error) return [];
-    return (data ?? []) as Review[];
+    return enrichReviewsWithProfiles((data ?? []) as Review[]);
   } catch {
     return [];
   }
