@@ -115,17 +115,17 @@ export async function updateAvatar(userId: string, file: File): Promise<string> 
   }
 
   const ext = file.name.split(".").pop() || "jpg";
-  // 항상 같은 경로에 덮어쓰기하여 스토리지 정리 불필요
-  const fileName = `avatars/${userId}/profile.${ext}`;
+  // 본인 폴더에 고정 파일명으로 덮어쓰기
+  const fileName = `${userId}/profile.${ext}`;
 
   const { error: uploadError } = await supabase.storage
-    .from("restroom-photos")
+    .from("avatars")
     .upload(fileName, file, { contentType: file.type, upsert: true });
 
   if (uploadError) throw new Error(`사진 업로드 실패: ${uploadError.message}`);
 
   const { data } = supabase.storage
-    .from("restroom-photos")
+    .from("avatars")
     .getPublicUrl(fileName);
 
   // 브라우저 캐시 방지용 쿼리 파라미터
