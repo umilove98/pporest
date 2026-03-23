@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { User, MessageSquare, Camera, LogOut, Star, Shield, SlidersHorizontal } from "lucide-react";
+import { User, Camera, LogOut, Shield, SlidersHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Card, CardContent } from "@/components/ui/card";
@@ -132,18 +132,15 @@ export default function ProfilePage() {
             {/* 통계 */}
             <div className="mt-6 flex w-full gap-3">
               <div className="flex flex-1 flex-col items-center rounded-lg border p-4">
-                <MessageSquare className="h-5 w-5 text-muted-foreground" />
-                <span className="mt-1 text-xl font-bold">{reviews.length}</span>
+                <span className="text-xl font-bold">{reviews.length}</span>
                 <span className="text-xs text-muted-foreground">리뷰</span>
               </div>
               <div className="flex flex-1 flex-col items-center rounded-lg border p-4">
-                <Camera className="h-5 w-5 text-muted-foreground" />
-                <span className="mt-1 text-xl font-bold">{photoCount}</span>
+                <span className="text-xl font-bold">{photoCount}</span>
                 <span className="text-xs text-muted-foreground">사진</span>
               </div>
               <div className="flex flex-1 flex-col items-center rounded-lg border p-4">
-                <Star className="h-5 w-5 text-muted-foreground" />
-                <span className="mt-1 text-xl font-bold">{avgRating}</span>
+                <span className="text-xl font-bold">{avgRating}</span>
                 <span className="text-xs text-muted-foreground">평균 평점</span>
               </div>
             </div>
@@ -152,9 +149,9 @@ export default function ProfilePage() {
             {showOnboarding && !showPreferenceSurvey && (
               <Card className="mt-6 w-full border-emerald-300 bg-emerald-50/80 dark:border-emerald-700 dark:bg-emerald-950/20">
                 <CardContent className="p-4 text-center">
-                  <p className="text-sm font-semibold">취향을 설정하면</p>
+                  <p className="text-sm font-semibold">환영합니다! 🎉</p>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    나만의 화장실 등급을 볼 수 있어요
+                    취향을 설정하면 나만의 화장실 등급을 볼 수 있어요
                   </p>
                   <Button
                     size="sm"
@@ -205,6 +202,7 @@ export default function ProfilePage() {
                     await saveUserPreferences(prefs);
                     setPreferences(prefs);
                     setNeedsPreferenceSurvey(false);
+                    setShowPreferenceSurvey(false);
                   }}
                   compact
                 />

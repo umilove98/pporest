@@ -11,9 +11,11 @@ import { StarRating } from "@/components/restroom/star-rating";
 import { PhotoGrid } from "@/components/restroom/photo-grid";
 import { ReviewCard } from "@/components/restroom/review-card";
 import { Input } from "@/components/ui/input";
-import { getRestroomById, getReviewsByKey, createEditRequest, getSafetyCount, checkSafety, hasCheckedSafetyToday } from "@/lib/api";
+import { getRestroomById, getReviewsByKey, createEditRequest, getSafetyCount, checkSafety, hasCheckedSafetyToday, getUserPreferences, calculateTier } from "@/lib/api";
+import { TierBadge } from "@/components/preference/tier-badge";
 import { useAuth } from "@/components/auth/auth-provider";
-import { Restroom, Review } from "@/lib/types";
+import { Restroom, Review, RestroomTier } from "@/lib/types";
+import { getCachedTier, setCachedTier } from "@/lib/tier-cache";
 
 export default function RestroomDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -32,6 +34,7 @@ export default function RestroomDetailPage() {
   const [safetyCount, setSafetyCount] = useState(0);
   const [alreadyChecked, setAlreadyChecked] = useState(false);
   const [safetyAnim, setSafetyAnim] = useState(false);
+  const [tier, setTier] = useState<RestroomTier>(null);
 
   const refreshData = async () => {
     try {
@@ -63,6 +66,19 @@ export default function RestroomDetailPage() {
     }
     fetchData();
   }, [id]);
+
+  // 티어 계산 (캐시 우선)
+  useEffect(() => {
+    if (!user || !restroom) { setTier(null); return; }
+    getUserPreferences(user.id).then((prefs) => {
+      if (!prefs) return;
+      const cached = getCachedTier(id, prefs);
+      if (cached !== undefined) { setTier(cached); return; }
+      const computed = calculateTier(restroom, prefs);
+      setTier(computed);
+      setCachedTier(id, computed, prefs);
+    }).catch(() => {});
+  }, [id, user, restroom]);
 
   // 안전 확인 데이터 로드
   useEffect(() => {
@@ -140,6 +156,7 @@ export default function RestroomDetailPage() {
         <Button variant="ghost" size="icon" onClick={() => router.back()}>
           <ChevronLeft className="h-5 w-5" />
         </Button>
+        {tier && <TierBadge tier={tier} />}
         <h1 className="text-base font-semibold truncate">{restroom.name}</h1>
       </header>
 
