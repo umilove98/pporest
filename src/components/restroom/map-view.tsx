@@ -26,6 +26,7 @@ declare global {
         InfoWindow: new (options: { content: string }) => KakaoInfoWindow;
         services: {
           Geocoder: new () => KakaoGeocoder;
+          Places: new () => KakaoPlaces;
           Status: { OK: string };
         };
         event: {
@@ -71,6 +72,13 @@ interface KakaoGeocoder {
   addressSearch: (
     addr: string,
     callback: (result: Array<{ address_name: string; road_address_name?: string; x: string; y: string }>, status: string) => void
+  ) => void;
+}
+
+interface KakaoPlaces {
+  keywordSearch: (
+    keyword: string,
+    callback: (result: Array<{ place_name: string; address_name: string; road_address_name: string; x: string; y: string }>, status: string) => void
   ) => void;
 }
 
