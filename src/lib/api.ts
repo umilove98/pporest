@@ -763,6 +763,20 @@ export async function moderatePhoto(
   return res.json();
 }
 
+/**
+ * 리뷰 텍스트 적절성 검증 (성희롱/차별 등 차단, 일반 욕설 허용)
+ */
+export async function moderateComment(
+  comment: string
+): Promise<{ allowed: boolean; reason: string }> {
+  const res = await fetch("/api/moderate-comment", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ comment }),
+  });
+  return res.json();
+}
+
 // === 수정 요청 ===
 
 /**
