@@ -667,6 +667,32 @@ export async function createReview(review: {
 }
 
 /**
+ * 리뷰 감성 분석 후 DB 업데이트 (비동기 — 실패해도 리뷰 등록에 영향 없음)
+ */
+export async function analyzeAndUpdateSentiment(
+  reviewId: string,
+  comment: string,
+  rating: number
+): Promise<void> {
+  try {
+    const res = await fetch("/api/analyze-sentiment", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ comment, rating }),
+    });
+    const { sentiment } = await res.json();
+    if (sentiment) {
+      await supabase
+        .from("reviews")
+        .update({ sentiment })
+        .eq("id", reviewId);
+    }
+  } catch (err) {
+    console.error("Sentiment analysis failed:", err);
+  }
+}
+
+/**
  * 리뷰 수정 (본인 리뷰만 — RLS로 보장)
  */
 export async function updateReview(
@@ -711,31 +737,6 @@ export async function getReviewsByUserId(userId: string): Promise<Review[]> {
   }
 }
 
-/**
- * 리뷰 감성 분석 후 DB 업데이트 (비동기 — 실패해도 리뷰 등록에 영향 없음)
- */
-export async function analyzeAndUpdateSentiment(
-  reviewId: string,
-  comment: string,
-  rating: number
-): Promise<void> {
-  try {
-    const res = await fetch("/api/analyze-sentiment", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ comment, rating }),
-    });
-    const { sentiment } = await res.json();
-    if (sentiment) {
-      await supabase
-        .from("reviews")
-        .update({ sentiment })
-        .eq("id", reviewId);
-    }
-  } catch (err) {
-    console.error("Sentiment analysis failed:", err);
-  }
-}
 
 /**
  * 사진 적절성 검증 (Gemini Vision)
