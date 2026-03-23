@@ -181,8 +181,8 @@ export function ReviewForm({ restroomId, onSubmit }: ReviewFormProps) {
       }, 2000);
     } catch (err) {
       console.error("[ReviewForm] submit error →", err);
-      const msg = err instanceof Error ? err.message : String(err);
-      setError(`리뷰 등록에 실패했습니다: ${msg}`);
+      const msg = err instanceof Error ? err.message : "";
+      setError(msg || "리뷰 등록에 실패했습니다. 다시 시도해주세요.");
     } finally {
       setLoading(false);
       setSubmitPhase(null);

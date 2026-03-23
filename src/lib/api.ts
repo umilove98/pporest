@@ -737,7 +737,7 @@ export async function createReview(review: {
 
   if (error) {
     console.error("[createReview] insert error →", error);
-    throw new Error(`리뷰 저장 실패: ${error.message} (code: ${error.code})`);
+    throw new Error("리뷰 저장에 실패했습니다.");
   }
   console.log("[createReview] saved →", data);
   return data as Review;
