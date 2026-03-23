@@ -180,7 +180,7 @@ export function MapView({ restrooms, userLocation, className = "", onBoundsChang
         sw: { lat: sw.getLat(), lng: sw.getLng() },
         ne: { lat: ne.getLat(), lng: ne.getLng() },
       });
-    }, 300);
+    }, 150);
   }, []);
 
   // 지도 초기화 (한 번만)
@@ -200,7 +200,7 @@ export function MapView({ restrooms, userLocation, className = "", onBoundsChang
     mapInstanceRef.current = map;
     initializedRef.current = true;
 
-    setTimeout(() => map.relayout(), 100);
+    map.relayout();
 
     // 내 위치 마커
     if (userLocation) {
@@ -223,10 +223,8 @@ export function MapView({ restrooms, userLocation, className = "", onBoundsChang
     // idle 이벤트 (디바운스)
     kakao.maps.event.addListener(map, "idle", handleIdle);
 
-    // 초기 bounds
-    setTimeout(() => {
-      handleIdle();
-    }, 200);
+    // 초기 bounds (즉시 실행)
+    handleIdle();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sdkReady]);
 

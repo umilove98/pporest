@@ -144,6 +144,70 @@ export async function updateAvatar(userId: string, file: File): Promise<string> 
 
 // === 공공 화장실 DB 조회 ===
 
+/** RPC 결과 → Restroom 변환 (별점 포함) */
+function rpcRowToRestroom(row: {
+  id: string; name: string; address: string; lat: number; lng: number;
+  disabled: boolean; diaper: boolean; hours: string | null;
+  male_toilet: number; male_urinal: number; female_toilet: number;
+  emergency_bell: boolean; cctv: boolean; data_date: string | null;
+  avg_rating: number; review_count: number;
+}): Restroom {
+  const tags: string[] = ["무료"];
+  if (row.disabled) tags.push("장애인 접근 가능");
+  if (row.diaper) tags.push("기저귀 교환대");
+  if (row.hours?.includes("24시간")) tags.push("24시간");
+
+  return {
+    id: row.id, name: row.name, address: row.address,
+    lat: row.lat, lng: row.lng, tags,
+    is_open: true, source: "public_data", status: "approved",
+    has_disabled_access: row.disabled, has_diaper_table: row.diaper,
+    has_bidet: false, is_free: true, open_hours: row.hours,
+    male_toilet: row.male_toilet, male_urinal: row.male_urinal,
+    female_toilet: row.female_toilet, emergency_bell: row.emergency_bell,
+    cctv: row.cctv, data_date: row.data_date, created_at: "",
+    rating: Number(row.avg_rating),
+    review_count: Number(row.review_count),
+  };
+}
+
+/**
+ * bounds 내 공공 화장실 + 별점 통계 (RPC 한 번 호출)
+ */
+export async function getPublicRestroomsWithStatsByBounds(
+  swLat: number, swLng: number, neLat: number, neLng: number,
+  limit = 30
+): Promise<Restroom[]> {
+  const { data, error } = await supabase.rpc("get_public_restrooms_with_stats", {
+    sw_lat: swLat, sw_lng: swLng, ne_lat: neLat, ne_lng: neLng, max_count: limit,
+  });
+
+  if (error) throw error;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (data ?? []).map((row: any) => rpcRowToRestroom(row));
+}
+
+/**
+ * 공공 화장실 검색 + 별점 통계 (RPC 한 번 호출)
+ */
+export async function searchPublicRestroomsWithStats(
+  query: string,
+  filters: string[],
+  limit = 30
+): Promise<Restroom[]> {
+  const { data, error } = await supabase.rpc("search_public_restrooms_with_stats", {
+    search_query: query,
+    filter_disabled: filters.includes("장애인 접근 가능"),
+    filter_diaper: filters.includes("기저귀 교환대"),
+    filter_24h: filters.includes("24시간"),
+    max_count: limit,
+  });
+
+  if (error) throw error;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (data ?? []).map((row: any) => rpcRowToRestroom(row));
+}
+
 /**
  * bounds 내 공공 화장실 조회 (지도 표시용)
  */
@@ -153,7 +217,7 @@ export async function getPublicRestroomsByBounds(
 ): Promise<PublicRestroom[]> {
   const { data, error } = await supabase
     .from("public_restrooms")
-    .select("*")
+    .select("id,name,address,lat,lng,disabled,diaper,hours,male_toilet,male_urinal,female_toilet,emergency_bell,cctv,data_date")
     .gte("lat", swLat)
     .lte("lat", neLat)
     .gte("lng", swLng)

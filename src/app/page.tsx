@@ -6,12 +6,12 @@ import { MapPin, Plus } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { MapView, MapBounds, MarkerData } from "@/components/restroom/map-view";
 import { RestroomCard } from "@/components/restroom/restroom-card";
-import { getPublicRestroomsByBounds, getUserRestroomsByBounds, toRestroom, userRestroomToRestroom, enrichRestroomsWithStats } from "@/lib/api";
+import { getPublicRestroomsWithStatsByBounds, getUserRestroomsByBounds, userRestroomToRestroom, enrichRestroomsWithStats } from "@/lib/api";
 import { Restroom } from "@/lib/types";
 import { getDistanceMeters, formatDistance } from "@/lib/utils";
 
-const MAX_LIST_ITEMS = 20;
-const MAX_MARKERS = 50;
+const MAX_LIST_ITEMS = 15;
+const MAX_MARKERS = 30;
 
 export default function HomePage() {
   const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null);
@@ -27,19 +27,38 @@ export default function HomePage() {
     setMapBounds(bounds);
   }, []);
 
-  // 1. 현재 위치 가져오기
+  // 1. 현재 위치 가져오기 (캐시 우선 → GPS 정밀 보정)
   useEffect(() => {
     if (!navigator.geolocation) {
       setLocationReady(true);
       return;
     }
+    // 캐시된 위치로 빠르게 시작 (최대 5분 이내 캐시)
     navigator.geolocation.getCurrentPosition(
       (pos) => {
         setLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
         setLocationReady(true);
+        // GPS 정밀 위치로 보정 (백그라운드)
+        navigator.geolocation.getCurrentPosition(
+          (precise) => {
+            setLocation({ lat: precise.coords.latitude, lng: precise.coords.longitude });
+          },
+          () => {},
+          { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+        );
       },
-      () => setLocationReady(true),
-      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+      () => {
+        // 캐시 실패 시 GPS로 직접 시도
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            setLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+            setLocationReady(true);
+          },
+          () => setLocationReady(true),
+          { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+        );
+      },
+      { enableHighAccuracy: false, timeout: 2000, maximumAge: 300000 }
     );
   }, []);
 
@@ -73,19 +92,18 @@ export default function HomePage() {
       setLoading(true);
       try {
         const { sw, ne } = mapBounds!;
-        const [publicData, userData] = await Promise.all([
-          getPublicRestroomsByBounds(sw.lat, sw.lng, ne.lat, ne.lng, MAX_MARKERS),
+        // 공공 화장실은 RPC로 별점 포함 조회, 유저 화장실은 별도
+        const [publicRestrooms, userData] = await Promise.all([
+          getPublicRestroomsWithStatsByBounds(sw.lat, sw.lng, ne.lat, ne.lng, MAX_MARKERS),
           getUserRestroomsByBounds(sw.lat, sw.lng, ne.lat, ne.lng, MAX_MARKERS),
         ]);
 
         // 요청 사이에 bounds가 바뀌었으면 무시
         if (boundsRef.current !== mapBounds) return;
 
-        // 두 소스를 Restroom으로 통합 + 리뷰 통계 반영
-        const allRestrooms: Restroom[] = await enrichRestroomsWithStats([
-          ...publicData.map((p) => toRestroom(p)),
-          ...userData.map((u) => userRestroomToRestroom(u)),
-        ]);
+        // 유저 화장실만 별점 보강 필요
+        const userRestrooms = userData.map((u) => userRestroomToRestroom(u));
+        const allRestrooms: Restroom[] = [...publicRestrooms, ...userRestrooms];
 
         // 거리순 정렬 (위치 있을 때)
         if (location) {
@@ -106,17 +124,31 @@ export default function HomePage() {
           }))
         );
 
-        // 리스트용 (최대 20개)
-        setVisibleRestrooms(
-          allRestrooms.slice(0, MAX_LIST_ITEMS).map((r) => {
-            if (location) {
-              r.distance = formatDistance(
-                getDistanceMeters(location.lat, location.lng, r.lat, r.lng)
+        // 리스트용 (최대 20개) — 즉시 표시
+        const listItems = allRestrooms.slice(0, MAX_LIST_ITEMS).map((r) => {
+          if (location) {
+            r.distance = formatDistance(
+              getDistanceMeters(location.lat, location.lng, r.lat, r.lng)
+            );
+          }
+          return r;
+        });
+        setVisibleRestrooms(listItems);
+        setLoading(false);
+
+        // 유저 화장실만 별점 비동기 보강 (공공 화장실은 RPC에서 이미 포함)
+        const userItems = listItems.filter((r) => r.source === "user");
+        if (userItems.length > 0) {
+          enrichRestroomsWithStats(userItems).then((enriched) => {
+            if (boundsRef.current === mapBounds) {
+              const enrichedMap = new Map(enriched.map((r) => [r.id, r]));
+              setVisibleRestrooms((prev) =>
+                prev.map((r) => enrichedMap.get(r.id) ?? r)
               );
             }
-            return r;
-          })
-        );
+          }).catch(() => {});
+        }
+        return; // finally에서 setLoading(false) 중복 방지
       } catch (err) {
         console.error("[홈] 화장실 데이터 조회 실패:", err);
         setFilteredMarkers([]);
