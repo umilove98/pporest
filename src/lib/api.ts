@@ -652,18 +652,53 @@ export async function createReview(review: {
     getUserTopPreferences(review.user_id),
   ]);
 
+  console.log("[createReview] snapshot →", { avgRating, topPrefs });
+
+  const insertPayload = {
+    ...review,
+    user_avg_rating: avgRating,
+    user_top_preferences: topPrefs.length > 0 ? topPrefs : null,
+  };
+  console.log("[createReview] insert payload →", insertPayload);
+
   const { data, error } = await supabase
     .from("reviews")
-    .insert({
-      ...review,
-      user_avg_rating: avgRating,
-      user_top_preferences: topPrefs.length > 0 ? topPrefs : null,
-    })
+    .insert(insertPayload)
     .select()
     .single();
 
-  if (error) throw error;
+  if (error) {
+    console.error("[createReview] insert error →", error);
+    throw error;
+  }
+  console.log("[createReview] saved →", data);
   return data as Review;
+}
+
+/**
+ * 리뷰 감성 분석 후 DB 업데이트 (비동기 — 실패해도 리뷰 등록에 영향 없음)
+ */
+export async function analyzeAndUpdateSentiment(
+  reviewId: string,
+  comment: string,
+  rating: number
+): Promise<void> {
+  try {
+    const res = await fetch("/api/analyze-sentiment", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ comment, rating }),
+    });
+    const { sentiment } = await res.json();
+    if (sentiment) {
+      await supabase
+        .from("reviews")
+        .update({ sentiment })
+        .eq("id", reviewId);
+    }
+  } catch (err) {
+    console.error("Sentiment analysis failed:", err);
+  }
 }
 
 /**
@@ -711,31 +746,6 @@ export async function getReviewsByUserId(userId: string): Promise<Review[]> {
   }
 }
 
-/**
- * 리뷰 감성 분석 후 DB 업데이트 (비동기 — 실패해도 리뷰 등록에 영향 없음)
- */
-export async function analyzeAndUpdateSentiment(
-  reviewId: string,
-  comment: string,
-  rating: number
-): Promise<void> {
-  try {
-    const res = await fetch("/api/analyze-sentiment", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ comment, rating }),
-    });
-    const { sentiment } = await res.json();
-    if (sentiment) {
-      await supabase
-        .from("reviews")
-        .update({ sentiment })
-        .eq("id", reviewId);
-    }
-  } catch (err) {
-    console.error("Sentiment analysis failed:", err);
-  }
-}
 
 /**
  * 사진 적절성 검증 (Gemini Vision)
