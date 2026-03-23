@@ -28,7 +28,11 @@ export default function HomePage() {
   const [visibleRestrooms, setVisibleRestrooms] = useState<Restroom[]>([]);
   const [loading, setLoading] = useState(false);
   const boundsRef = useRef<MapBounds | null>(null);
+  const locationRef = useRef(location);
+  locationRef.current = location;
   const [preferences, setPreferences] = useState<UserPreferences | null>(null);
+  const preferencesRef = useRef(preferences);
+  preferencesRef.current = preferences;
   const [tierMap, setTierMap] = useState<Map<string, RestroomTier>>(new Map());
   const [tierFilter, setTierFilter] = useState<RestroomTier | null>(null);
 
@@ -105,7 +109,7 @@ export default function HomePage() {
     return () => clearInterval(interval);
   }, [location]);
 
-  // 2. bounds 변경 시 DB에서 조회
+  // 2. bounds 변경 시 DB에서 조회 (location/preferences는 ref로 참조 — 불필요한 재fetch 방지)
   useEffect(() => {
     if (!mapBounds) return;
     boundsRef.current = mapBounds;
@@ -114,6 +118,9 @@ export default function HomePage() {
       setLoading(true);
       try {
         const { sw, ne } = mapBounds!;
+        const loc = locationRef.current;
+        const prefs = preferencesRef.current;
+
         // 공공 화장실은 RPC로 별점 포함 조회, 유저 화장실은 별도
         const [publicRestrooms, userData] = await Promise.all([
           getPublicRestroomsWithStatsByBounds(sw.lat, sw.lng, ne.lat, ne.lng, MAX_MARKERS),
@@ -128,10 +135,10 @@ export default function HomePage() {
         const allRestrooms: Restroom[] = [...publicRestrooms, ...userRestrooms];
 
         // 거리순 정렬 (위치 있을 때)
-        if (location) {
+        if (loc) {
           allRestrooms.sort((a, b) => {
-            const distA = getDistanceMeters(location.lat, location.lng, a.lat, a.lng);
-            const distB = getDistanceMeters(location.lat, location.lng, b.lat, b.lng);
+            const distA = getDistanceMeters(loc.lat, loc.lng, a.lat, a.lng);
+            const distB = getDistanceMeters(loc.lat, loc.lng, b.lat, b.lng);
             return distA - distB;
           });
         }
@@ -148,9 +155,9 @@ export default function HomePage() {
 
         // 리스트용 (최대 20개) — 즉시 표시
         const listItems = allRestrooms.slice(0, MAX_LIST_ITEMS).map((r) => {
-          if (location) {
+          if (loc) {
             r.distance = formatDistance(
-              getDistanceMeters(location.lat, location.lng, r.lat, r.lng)
+              getDistanceMeters(loc.lat, loc.lng, r.lat, r.lng)
             );
           }
           return r;
@@ -159,12 +166,12 @@ export default function HomePage() {
         setLoading(false);
 
         // 티어 계산 (캐시 우선)
-        if (preferences) {
+        if (prefs) {
           const ids = allRestrooms.map((r) => r.id);
-          const cached = getCachedTiers(ids, preferences);
+          const cached = getCachedTiers(ids, prefs);
           const uncachedRestrooms = allRestrooms.filter((r) => !cached.has(r.id));
-          const computed = calculateTiers(uncachedRestrooms, preferences);
-          if (computed.size > 0) setCachedTiers(computed, preferences);
+          const computed = calculateTiers(uncachedRestrooms, prefs);
+          if (computed.size > 0) setCachedTiers(computed, prefs);
           // 합치기
           const merged = new Map<string, RestroomTier>();
           cached.forEach((v, k) => merged.set(k, v));
@@ -194,7 +201,21 @@ export default function HomePage() {
       }
     }
     load();
-  }, [mapBounds, location, preferences]);
+  }, [mapBounds]);
+
+  // 3. preferences 변경 시 티어만 재계산 (데이터 재fetch 없음)
+  useEffect(() => {
+    if (!preferences || visibleRestrooms.length === 0) return;
+    const ids = visibleRestrooms.map((r) => r.id);
+    const cached = getCachedTiers(ids, preferences);
+    const uncached = visibleRestrooms.filter((r) => !cached.has(r.id));
+    const computed = calculateTiers(uncached, preferences);
+    if (computed.size > 0) setCachedTiers(computed, preferences);
+    const merged = new Map<string, RestroomTier>();
+    cached.forEach((v, k) => merged.set(k, v));
+    computed.forEach((v, k) => merged.set(k, v));
+    setTierMap(merged);
+  }, [preferences, visibleRestrooms]);
 
   // 티어 필터 적용
   const displayRestrooms = tierFilter

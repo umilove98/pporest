@@ -420,7 +420,16 @@ export async function getRestroomDetail(
     p_user_id: userId ?? null,
   });
 
-  if (error || !data) return null;
+  if (error) {
+    console.error("[getRestroomDetail] RPC error:", error);
+    return null;
+  }
+  if (!data) {
+    console.error("[getRestroomDetail] RPC returned null data");
+    return null;
+  }
+
+  console.log("[getRestroomDetail] RPC response:", JSON.stringify(data).slice(0, 500));
 
   const d = data as {
     public: PublicRestroom | null;
@@ -430,8 +439,7 @@ export async function getRestroomDetail(
     already_checked: boolean;
   };
 
-  // review_count가 0이면 리뷰가 없는 것 — stats 보정
-  const stats = d.stats.review_count > 0
+  const stats = d.stats?.review_count > 0
     ? { rating: Number(d.stats.rating), review_count: d.stats.review_count }
     : { rating: 0, review_count: 0 };
 
@@ -444,12 +452,15 @@ export async function getRestroomDetail(
     restroom.review_count = stats.review_count;
   }
 
-  if (!restroom) return null;
+  if (!restroom) {
+    console.error("[getRestroomDetail] Could not build restroom from RPC data. public:", d.public, "user:", d.user);
+    return null;
+  }
 
   return {
     restroom,
-    safetyCount: d.safety_count,
-    alreadyChecked: d.already_checked,
+    safetyCount: d.safety_count ?? 0,
+    alreadyChecked: d.already_checked ?? false,
   };
 }
 
