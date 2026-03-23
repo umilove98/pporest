@@ -45,8 +45,8 @@ src/
 ├── components/
 │   ├── ui/                     # shadcn/ui primitives (button, card, input, etc.)
 │   ├── auth/
-│   │   ├── auth-provider.tsx   # AuthContext (Supabase session)
-│   │   └── login-form.tsx      # Email/password login + signup
+│   │   ├── auth-provider.tsx   # AuthContext (session + nickname + avatarUrl)
+│   │   └── login-form.tsx      # Email/password login + signup (닉네임 직접입력/자동생성)
 │   ├── layout/
 │   │   ├── mobile-shell.tsx    # Mobile container (max-w-md centered)
 │   │   └── bottom-nav.tsx      # Bottom tab navigation
@@ -55,13 +55,14 @@ src/
 │       ├── review-form.tsx     # Review submission (auth + API)
 │       ├── review-card.tsx     # Single review display
 │       ├── star-rating.tsx     # Interactive star rating
-│       ├── photo-grid.tsx      # Photo gallery placeholder
+│       ├── photo-grid.tsx      # Photo gallery (실제 사진 또는 빈 안내)
 │       ├── map-view.tsx        # Kakao Maps with markers + user location
 │       └── map-placeholder.tsx # Fallback when no map API key
 ├── lib/
 │   ├── types.ts                # Restroom, Review, EditRequest interfaces
-│   ├── api.ts                  # Supabase data access + admin + safety
+│   ├── api.ts                  # Supabase data access + admin + safety + 프로필
 │   ├── auth.ts                 # signUp, signIn, signOut, getUser
+│   ├── nickname.ts             # 랜덤 닉네임 생성 (형용사 + 명사 조합)
 │   ├── mock-data.ts            # Mock data fallback (legacy)
 │   ├── supabase.ts             # Supabase client (lazy init for build safety)
 │   └── utils.ts                # cn(), getDistanceMeters(), formatDistance()
@@ -100,9 +101,18 @@ src/
 - Dark mode supported via class-based toggling
 - Mobile-first design: main container is max-width 448px, centered
 
+### 사용자 식별 & 닉네임 규칙
+- **내부 식별**: `user_id` (Supabase Auth UUID) — Storage 경로, DB FK, RLS 등 시스템 전체에서 사용
+- **화면 표시**: `nickname` (user_profiles 테이블) — 리뷰, 활동 내역 등 사용자에게 보이는 모든 곳에서 사용
+- **프로필 사진**: `avatar_url` (user_profiles 테이블) — avatars 버킷에 저장
+- **절대 금지**: 이메일, UUID 등 개인정보를 화면에 노출하지 말 것 (프로필 본인 화면 제외)
+- **리뷰 등 사용자 활동 조회 시**: DB에 저장된 user_name이 아닌 user_profiles의 실시간 nickname/avatar_url을 매핑하여 표시 (`enrichReviewsWithProfiles` 패턴 참고)
+- **닉네임 자동생성**: 형용사 + 명사 조합, DB에서 동일 base 검색 후 +1 넘버링으로 중복 방지
+- **AuthContext**: `useAuth()` 훅으로 `user`, `nickname`, `avatarUrl`, `refreshProfile` 접근
+
 ### State Management
 - React `useState`/`useEffect` hooks for local state
-- `AuthContext` for authentication state (via `useAuth()` hook)
+- `AuthContext` for authentication state + profile (via `useAuth()` hook)
 - No global state library
 
 ## Environment Variables
@@ -137,6 +147,11 @@ NEXT_PUBLIC_KAKAO_MAP_API_KEY=<kakao-map-javascript-key>
 | `006_drop_unused_restrooms.sql` | 레거시 restrooms/restroom_stats 삭제 |
 | `007_grant_admin_users_select.sql` | admin_users SELECT GRANT |
 | `008_grant_all_tables.sql` | 전체 테이블 GRANT 일괄 추가 |
+| `009_fix_admin_users_rls.sql` | admin_users RLS 수정 |
+| `010_create_storage_bucket.sql` | restroom-photos 버킷 + RLS |
+| `011_add_user_profiles.sql` | user_profiles 테이블 (닉네임, 시퀀스, RLS, GRANT) |
+| `012_add_avatar_url.sql` | user_profiles에 avatar_url 컬럼 + update 정책 |
+| `013_create_avatars_bucket.sql` | avatars 버킷 (프로필 사진 전용) + RLS |
 
 ## Routes
 
@@ -154,5 +169,8 @@ NEXT_PUBLIC_KAKAO_MAP_API_KEY=<kakao-map-javascript-key>
 
 - **공공 화장실 데이터**: Supabase `public_restrooms` 테이블 — bounds/검색 쿼리로 DB 직접 조회, 시드는 `scripts/seed-public-restrooms.ts`
 - **유저 등록 화장실/리뷰/안전확인**: Supabase DB 직접 사용. localStorage fallback 절대 금지
+- **유저 프로필**: `user_profiles` 테이블에 닉네임/아바타 저장. 가입 시 생성, 이후 조회/수정만 수행
+- **Storage 버킷**: `restroom-photos` (화장실 사진), `avatars` (프로필 사진) — 용도별 분리
+- **사용자 노출 규칙**: 화면에 사용자 정보 표시 시 반드시 `user_profiles`의 nickname/avatar_url 사용. user_id/email 직접 노출 금지
 - **PWA**: manifest.json + service worker로 홈 화면 설치 지원
 - **지도**: Kakao Maps SDK, 내 위치 파란 점 마커, idle 디바운스 300ms
