@@ -415,62 +415,53 @@ export async function getRestroomDetail(
   restroomId: string,
   userId?: string,
 ): Promise<RestroomDetailResult | null> {
-  // RPC 시도 → 실패 시 개별 쿼리 fallback
   const { data, error } = await supabase.rpc("get_restroom_detail", {
     p_restroom_id: restroomId,
     p_user_id: userId ?? null,
   });
 
-  if (!error && data) {
-    const d = data as {
-      public: PublicRestroom | null;
-      user: UserRestroom | null;
-      stats: { rating: number; review_count: number };
-      safety_count: number;
-      already_checked: boolean;
-    };
-
-    const stats = d.stats.review_count > 0
-      ? { rating: Number(d.stats.rating), review_count: d.stats.review_count }
-      : { rating: 0, review_count: 0 };
-
-    let restroom: Restroom | null = null;
-    if (d.public) {
-      restroom = toRestroom(d.public, stats);
-    } else if (d.user) {
-      restroom = userRestroomToRestroom(d.user);
-      restroom.rating = stats.rating;
-      restroom.review_count = stats.review_count;
-    }
-
-    if (restroom) {
-      return {
-        restroom,
-        safetyCount: d.safety_count,
-        alreadyChecked: d.already_checked,
-      };
-    }
+  if (error) {
+    console.error("[getRestroomDetail] RPC error:", error);
+    return null;
+  }
+  if (!data) {
+    console.error("[getRestroomDetail] RPC returned null data");
+    return null;
   }
 
-  // Fallback: RPC 실패 또는 데이터 없음 → 개별 쿼리
-  const restroom = await getRestroomById(restroomId);
-  if (!restroom) return null;
+  console.log("[getRestroomDetail] RPC response:", JSON.stringify(data).slice(0, 500));
 
-  const today = getTodayStr();
-  const [safetyCount, alreadyChecked] = await Promise.all([
-    getSafetyCount(restroomId),
-    userId
-      ? supabase
-          .from("safety_checks")
-          .select("*", { count: "exact", head: true })
-          .eq("restroom_id", restroomId)
-          .eq("user_id", userId)
-          .eq("checked_date", today)
-          .then(({ count }) => (count ?? 0) > 0)
-      : Promise.resolve(false),
-  ]);
+  const d = data as {
+    public: PublicRestroom | null;
+    user: UserRestroom | null;
+    stats: { rating: number; review_count: number };
+    safety_count: number;
+    already_checked: boolean;
+  };
 
-  return { restroom, safetyCount, alreadyChecked };
+  const stats = d.stats?.review_count > 0
+    ? { rating: Number(d.stats.rating), review_count: d.stats.review_count }
+    : { rating: 0, review_count: 0 };
+
+  let restroom: Restroom | null = null;
+  if (d.public) {
+    restroom = toRestroom(d.public, stats);
+  } else if (d.user) {
+    restroom = userRestroomToRestroom(d.user);
+    restroom.rating = stats.rating;
+    restroom.review_count = stats.review_count;
+  }
+
+  if (!restroom) {
+    console.error("[getRestroomDetail] Could not build restroom from RPC data. public:", d.public, "user:", d.user);
+    return null;
+  }
+
+  return {
+    restroom,
+    safetyCount: d.safety_count ?? 0,
+    alreadyChecked: d.already_checked ?? false,
+  };
 }
 
 /**
