@@ -40,6 +40,14 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ko">
+      <head>
+        {/* GPS를 HTML 파싱 시점에 즉시 시작 — React 하이드레이션보다 먼저 */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){if(!navigator.geolocation)return;window.__geo={p:new Promise(function(resolve){navigator.geolocation.getCurrentPosition(function(pos){var loc={lat:pos.coords.latitude,lng:pos.coords.longitude};window.__geo.result=loc;resolve(loc)},function(){resolve(null)},{enableHighAccuracy:false,timeout:3000,maximumAge:300000})})};})()`,
+          }}
+        />
+      </head>
       <body className={`${geistSans.variable} font-sans antialiased`}>
         <AuthProvider>
           <MobileShell>{children}</MobileShell>

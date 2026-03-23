@@ -27,39 +27,42 @@ export default function HomePage() {
     setMapBounds(bounds);
   }, []);
 
-  // 1. 현재 위치 가져오기 (캐시 우선 → GPS 정밀 보정)
+  // 1. 현재 위치 가져오기 — layout.tsx <head>에서 이미 시작된 GPS 결과 활용
   useEffect(() => {
-    if (!navigator.geolocation) {
-      setLocationReady(true);
-      return;
-    }
-    // 캐시된 위치로 빠르게 시작 (최대 5분 이내 캐시)
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        setLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const geo = (window as any).__geo as { p: Promise<{ lat: number; lng: number } | null>; result?: { lat: number; lng: number } } | undefined;
+
+    if (geo) {
+      // 이미 결과가 도착했으면 즉시 사용
+      if (geo.result) {
+        setLocation(geo.result);
         setLocationReady(true);
-        // GPS 정밀 위치로 보정 (백그라운드)
-        navigator.geolocation.getCurrentPosition(
-          (precise) => {
-            setLocation({ lat: precise.coords.latitude, lng: precise.coords.longitude });
-          },
-          () => {},
-          { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
-        );
-      },
-      () => {
-        // 캐시 실패 시 GPS로 직접 시도
-        navigator.geolocation.getCurrentPosition(
-          (pos) => {
-            setLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
-            setLocationReady(true);
-          },
-          () => setLocationReady(true),
-          { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
-        );
-      },
-      { enableHighAccuracy: false, timeout: 2000, maximumAge: 300000 }
-    );
+      } else {
+        // 아직 대기 중이면 Promise 기다림
+        geo.p.then((loc) => {
+          if (loc) setLocation(loc);
+          setLocationReady(true);
+        });
+      }
+      // GPS 정밀 위치로 백그라운드 보정
+      navigator.geolocation?.getCurrentPosition(
+        (precise) => setLocation({ lat: precise.coords.latitude, lng: precise.coords.longitude }),
+        () => {},
+        { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
+      );
+    } else if (navigator.geolocation) {
+      // fallback: __geo가 없으면 직접 호출
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          setLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude });
+          setLocationReady(true);
+        },
+        () => setLocationReady(true),
+        { enableHighAccuracy: false, timeout: 3000, maximumAge: 300000 }
+      );
+    } else {
+      setLocationReady(true);
+    }
   }, []);
 
   // 역지오코딩
