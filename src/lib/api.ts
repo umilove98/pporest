@@ -5,6 +5,7 @@ import { EditRequest, PublicRestroom, Restroom, Review, UserRestroom } from "./t
 
 /**
  * 유저 닉네임 조회 — 없으면 user_metadata에서 가져와 프로필 생성
+ * user_metadata에 항상 닉네임을 백업하여 DB 실패 시에도 동일 닉네임 유지
  */
 export async function getOrCreateNickname(userId: string): Promise<string> {
   // 1) 기존 프로필 조회
@@ -20,11 +21,18 @@ export async function getOrCreateNickname(userId: string): Promise<string> {
   const { data: { user } } = await supabase.auth.getUser();
   const metaNickname = user?.user_metadata?.nickname;
 
-  // fallback: 랜덤 닉네임 생성
-  const { generateRandomNickname } = await import("./nickname");
-  const nickname = metaNickname || generateRandomNickname();
+  // 3) metadata에도 없으면 랜덤 생성 후 metadata에 저장 (영구 고정)
+  let nickname: string;
+  if (metaNickname) {
+    nickname = metaNickname;
+  } else {
+    const { generateRandomNickname } = await import("./nickname");
+    nickname = generateRandomNickname();
+    // metadata에 저장하여 다음 조회 시 동일 닉네임 반환 보장
+    await supabase.auth.updateUser({ data: { nickname } });
+  }
 
-  // 3) 프로필 생성
+  // 4) user_profiles 테이블에 저장 시도
   const { data: created, error: insertError } = await supabase
     .from("user_profiles")
     .insert({ user_id: userId, nickname })
@@ -32,7 +40,7 @@ export async function getOrCreateNickname(userId: string): Promise<string> {
     .single();
 
   if (insertError) {
-    // 동시 insert 충돌 또는 unique 위반 시 다시 조회
+    // 동시 insert 충돌 시 다시 조회, 실패해도 metadata 닉네임 반환
     const { data: retry } = await supabase
       .from("user_profiles")
       .select("nickname")
