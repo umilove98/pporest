@@ -11,10 +11,11 @@ import { StarRating } from "@/components/restroom/star-rating";
 import { PhotoGrid } from "@/components/restroom/photo-grid";
 import { ReviewCard } from "@/components/restroom/review-card";
 import { Input } from "@/components/ui/input";
-import { getRestroomDetail, getReviewsByKey, getRestroomById, createEditRequest, checkSafety } from "@/lib/api";
+import { getRestroomDetail, getReviewsByKey, getRestroomById, createEditRequest, checkSafety, getUserPreferences } from "@/lib/api";
+import { getHighlightedTags, getExtraTags } from "@/components/restroom/restroom-card";
 import { TierBadge } from "@/components/preference/tier-badge";
 import { useAuth } from "@/components/auth/auth-provider";
-import { Restroom, Review, ReviewSentiment, RestroomTier } from "@/lib/types";
+import { Restroom, Review, ReviewSentiment, RestroomTier, UserPreferences } from "@/lib/types";
 
 export default function RestroomDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -36,6 +37,9 @@ export default function RestroomDetailPage() {
   const [reviewsLoading, setReviewsLoading] = useState(true);
   const [sentimentFilter, setSentimentFilter] = useState<ReviewSentiment | "all">("all");
 
+  // 유저 취향 (태그 강조용)
+  const [preferences, setPreferences] = useState<UserPreferences | null>(null);
+
   // 수정 요청 모달
   const [showEditModal, setShowEditModal] = useState(false);
   const [editField, setEditField] = useState("");
@@ -48,9 +52,10 @@ export default function RestroomDetailPage() {
   // Phase 1: RPC로 화장실 정보 + 안전확인 한방 로딩
   // Phase 2: 리뷰 병렬 로딩 (스켈레톤 표시)
   useEffect(() => {
-    // 두 요청을 동시에 시작
+    // 모든 요청을 동시에 시작
     const detailPromise = getRestroomDetail(id, user?.id);
     const reviewsPromise = getReviewsByKey(id);
+    if (user) getUserPreferences(user.id).then(setPreferences).catch(() => {});
 
     // Phase 1: 화장실 정보 먼저 표시
     detailPromise
@@ -271,16 +276,38 @@ export default function RestroomDetailPage() {
           </div>
 
           <div className="mt-3 flex flex-wrap gap-1.5">
-            {restroom.tags.map((tag) => (
-              <Badge key={tag} variant="secondary" className="text-xs">
-                {tag}
-              </Badge>
-            ))}
-            {restroom.source === "user" && (
-              <Badge variant="outline" className="text-xs border-emerald-500 text-emerald-600">
-                유저 등록
-              </Badge>
-            )}
+            {(() => {
+              const highlighted = getHighlightedTags(restroom, preferences);
+              const extraTags = getExtraTags(restroom, highlighted);
+              const hl = "border-emerald-400 bg-emerald-50 text-emerald-700 dark:border-emerald-600 dark:bg-emerald-950/30 dark:text-emerald-300";
+              return (
+                <>
+                  {restroom.tags.map((tag) => (
+                    <Badge
+                      key={tag}
+                      variant="outline"
+                      className={`text-xs ${highlighted.has(tag) ? hl : ""}`}
+                    >
+                      {tag}
+                    </Badge>
+                  ))}
+                  {extraTags.map(({ label, key, isHighlighted }) => (
+                    <Badge
+                      key={key}
+                      variant="outline"
+                      className={`text-xs ${isHighlighted ? hl : ""}`}
+                    >
+                      {label}
+                    </Badge>
+                  ))}
+                  {restroom.source === "user" && (
+                    <Badge variant="outline" className="text-xs border-emerald-500 text-emerald-600">
+                      유저 등록
+                    </Badge>
+                  )}
+                </>
+              );
+            })()}
           </div>
         </div>
 
