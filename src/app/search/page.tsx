@@ -5,7 +5,7 @@ import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { RestroomCard } from "@/components/restroom/restroom-card";
-import { searchPublicRestroomsDB, searchUserRestroomsDB, toRestroom, userRestroomToRestroom, enrichRestroomsWithStats } from "@/lib/api";
+import { searchPublicRestroomsWithStats, searchUserRestroomsDB, userRestroomToRestroom, enrichRestroomsWithStats } from "@/lib/api";
 import { Restroom } from "@/lib/types";
 
 const filters = ["장애인 접근 가능", "기저귀 교환대", "24시간"];
@@ -25,15 +25,16 @@ export default function SearchPage() {
   const doSearch = useCallback(async () => {
     setLoading(true);
     try {
-      const [publicResults, userResults] = await Promise.all([
-        searchPublicRestroomsDB(query, activeFilters),
+      const [publicRestrooms, userResults] = await Promise.all([
+        searchPublicRestroomsWithStats(query, activeFilters, 30),
         searchUserRestroomsDB(query, activeFilters),
       ]);
-      const merged = [
-        ...publicResults.map((p) => toRestroom(p)),
-        ...userResults.map((u) => userRestroomToRestroom(u)),
-      ];
-      setRestrooms(await enrichRestroomsWithStats(merged));
+      // 유저 화장실만 별점 보강 필요
+      const userRestrooms = userResults.map((u) => userRestroomToRestroom(u));
+      const enrichedUser = userRestrooms.length > 0
+        ? await enrichRestroomsWithStats(userRestrooms)
+        : userRestrooms;
+      setRestrooms([...publicRestrooms, ...enrichedUser]);
     } catch {
       setRestrooms([]);
     } finally {
@@ -42,9 +43,14 @@ export default function SearchPage() {
   }, [query, activeFilters]);
 
   useEffect(() => {
+    // 검색어나 필터가 없으면 검색하지 않음
+    if (!query && activeFilters.length === 0) {
+      setRestrooms([]);
+      return;
+    }
     const timer = setTimeout(doSearch, 300);
     return () => clearTimeout(timer);
-  }, [doSearch]);
+  }, [doSearch, query, activeFilters]);
 
   return (
     <div className="flex flex-col">
