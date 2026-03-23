@@ -45,8 +45,9 @@ export default function ProfilePage() {
     try {
       await updateAvatar(user.id, file);
       refreshProfile();
-    } catch {
-      alert("사진 업로드에 실패했습니다.");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "사진 업로드에 실패했습니다.";
+      alert(msg);
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = "";

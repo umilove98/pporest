@@ -109,27 +109,37 @@ export async function getAvatarUrl(userId: string): Promise<string | null> {
  * 프로필 사진 업로드 및 URL 저장
  */
 export async function updateAvatar(userId: string, file: File): Promise<string> {
+  // 파일 크기 제한 (5MB)
+  if (file.size > 5 * 1024 * 1024) {
+    throw new Error("사진 크기는 5MB 이하만 가능합니다.");
+  }
+
   const ext = file.name.split(".").pop() || "jpg";
-  const fileName = `avatars/${userId}/${Date.now()}.${ext}`;
+  // 항상 같은 경로에 덮어쓰기하여 스토리지 정리 불필요
+  const fileName = `avatars/${userId}/profile.${ext}`;
 
   const { error: uploadError } = await supabase.storage
     .from("restroom-photos")
     .upload(fileName, file, { contentType: file.type, upsert: true });
 
-  if (uploadError) throw uploadError;
+  if (uploadError) throw new Error(`사진 업로드 실패: ${uploadError.message}`);
 
   const { data } = supabase.storage
     .from("restroom-photos")
     .getPublicUrl(fileName);
 
-  const avatarUrl = data.publicUrl;
+  // 브라우저 캐시 방지용 쿼리 파라미터
+  const avatarUrl = `${data.publicUrl}?t=${Date.now()}`;
 
-  const { error: updateError } = await supabase
+  // upsert로 user_profiles 행이 없어도 처리
+  const { error: upsertError } = await supabase
     .from("user_profiles")
-    .update({ avatar_url: avatarUrl })
-    .eq("user_id", userId);
+    .upsert(
+      { user_id: userId, avatar_url: avatarUrl },
+      { onConflict: "user_id" }
+    );
 
-  if (updateError) throw updateError;
+  if (upsertError) throw new Error(`프로필 저장 실패: ${upsertError.message}`);
 
   return avatarUrl;
 }
