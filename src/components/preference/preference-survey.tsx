@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { Check, Sparkles } from "lucide-react";
+import { Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { PreferenceKey, UserPreferences } from "@/lib/types";
@@ -126,7 +126,6 @@ export function PreferenceSurvey({ initialPreferences, onSave, onSkip, compact }
                 )}
 
                 {/* 항목 정보 */}
-                <span className="text-base">{item.emoji}</span>
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium leading-tight">{item.label}</p>
                   <p className="text-[11px] text-muted-foreground leading-tight">{item.description}</p>
@@ -146,26 +145,9 @@ export function PreferenceSurvey({ initialPreferences, onSave, onSkip, compact }
         <Button
           onClick={handleSave}
           disabled={saving || selectedOrder.length === 0}
-          className="w-full gap-2"
+          className="w-full"
         >
-          {saving ? (
-            <>
-              <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-              저장 중...
-            </>
-          ) : saved ? (
-            <>
-              <Check className="h-4 w-4" />
-              저장 완료!
-            </>
-          ) : (
-            <>
-              <Sparkles className="h-4 w-4" />
-              {selectedOrder.length > 0
-                ? `${selectedOrder.length}개 항목 저장`
-                : "항목을 선택하세요"}
-            </>
-          )}
+          {saving ? "저장 중..." : saved ? "저장 완료!" : selectedOrder.length > 0 ? "저장" : "항목을 선택하세요"}
         </Button>
 
         {onSkip && (

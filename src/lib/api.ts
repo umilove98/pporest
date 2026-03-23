@@ -794,8 +794,22 @@ export async function getReviewsByUserId(userId: string): Promise<Review[]> {
       .eq("user_id", userId)
       .order("created_at", { ascending: false });
 
-    if (error) return [];
-    return enrichReviewsWithProfiles((data ?? []) as Review[]);
+    if (error || !data || data.length === 0) return [];
+
+    const reviews = (data ?? []) as Review[];
+
+    // 화장실 이름 매핑
+    const restroomIds = Array.from(new Set(reviews.map((r) => r.restroom_id)));
+    const [pubRes, userRes] = await Promise.all([
+      supabase.from("public_restrooms").select("id, name").in("id", restroomIds),
+      supabase.from("user_restrooms").select("id, name").in("id", restroomIds),
+    ]);
+    const nameMap = new Map<string, string>();
+    (pubRes.data ?? []).forEach((r: { id: string; name: string }) => nameMap.set(r.id, r.name));
+    (userRes.data ?? []).forEach((r: { id: string; name: string }) => nameMap.set(r.id, r.name));
+    reviews.forEach((r) => { r.restroom_name = nameMap.get(r.restroom_id); });
+
+    return enrichReviewsWithProfiles(reviews);
   } catch {
     return [];
   }
