@@ -722,8 +722,6 @@ export async function createReview(review: {
     getUserTopPreferences(review.user_id),
   ]);
 
-  console.log("[createReview] snapshot →", { avgRating, topPrefs });
-
   const insertPayload = {
     ...review,
     user_avg_rating: avgRating,
@@ -739,7 +737,7 @@ export async function createReview(review: {
 
   if (error) {
     console.error("[createReview] insert error →", error);
-    throw error;
+    throw new Error(`리뷰 저장 실패: ${error.message} (code: ${error.code})`);
   }
   console.log("[createReview] saved →", data);
   return data as Review;
@@ -860,6 +858,9 @@ export async function moderatePhoto(
     method: "POST",
     body: formData,
   });
+  if (!res.ok) {
+    throw new Error(`사진 검증 서비스 오류 (${res.status})`);
+  }
   return res.json();
 }
 
@@ -874,6 +875,9 @@ export async function moderateComment(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ comment }),
   });
+  if (!res.ok) {
+    throw new Error(`리뷰 검증 서비스 오류 (${res.status})`);
+  }
   return res.json();
 }
 
