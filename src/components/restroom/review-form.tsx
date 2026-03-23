@@ -1,11 +1,11 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect, useCallback } from "react";
 import { Camera, Check, X, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { StarRating } from "./star-rating";
-import { createReview, analyzeAndUpdateSentiment, uploadPhoto, moderatePhoto } from "@/lib/api";
+import { createReview, analyzeAndUpdateSentiment, uploadPhoto, moderatePhoto, moderateComment } from "@/lib/api";
 import { useAuth } from "@/components/auth/auth-provider";
 
 interface ReviewFormProps {
@@ -27,6 +27,26 @@ export function ReviewForm({ restroomId, onSubmit }: ReviewFormProps) {
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [photoChecking, setPhotoChecking] = useState(false);
   const [photoError, setPhotoError] = useState("");
+  const [checkingMsg, setCheckingMsg] = useState("");
+
+  const CHECKING_MESSAGES = useCallback(() => [
+    "사진을 확인하고 있어요...",
+    "화장실 관련 사진인지 분석 중...",
+    "부적절한 내용이 없는지 검사 중...",
+    "거의 다 됐어요!",
+  ], []);
+
+  useEffect(() => {
+    if (!photoChecking) return;
+    let idx = 0;
+    const msgs = CHECKING_MESSAGES();
+    setCheckingMsg(msgs[0]);
+    const timer = setInterval(() => {
+      idx = (idx + 1) % msgs.length;
+      setCheckingMsg(msgs[idx]);
+    }, 1500);
+    return () => clearInterval(timer);
+  }, [photoChecking, CHECKING_MESSAGES]);
 
   const handlePhotoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -78,6 +98,16 @@ export function ReviewForm({ restroomId, onSubmit }: ReviewFormProps) {
     setError("");
 
     try {
+      // 리뷰 내용 검증 (성희롱/차별 발언 차단)
+      if (comment.trim()) {
+        const modResult = await moderateComment(comment);
+        if (!modResult.allowed) {
+          setError(modResult.reason || "부적절한 내용이 포함되어 있습니다.");
+          setLoading(false);
+          return;
+        }
+      }
+
       if (user) {
         // 사진이 있으면 먼저 업로드
         let photoUrl: string | undefined;
@@ -185,7 +215,7 @@ export function ReviewForm({ restroomId, onSubmit }: ReviewFormProps) {
             {photoChecking ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin" />
-                사진 검증 중...
+                사진 검증 중
               </>
             ) : (
               <>
@@ -196,12 +226,15 @@ export function ReviewForm({ restroomId, onSubmit }: ReviewFormProps) {
           </Button>
         )}
 
+        {photoChecking && (
+          <p className="mt-1.5 text-xs text-muted-foreground animate-pulse">{checkingMsg}</p>
+        )}
         {photoError && <p className="mt-1 text-xs text-red-500">{photoError}</p>}
       </div>
 
       {error && <p className="text-sm text-red-500">{error}</p>}
 
-      <Button type="submit" className="w-full" disabled={rating === 0 || loading || photoChecking}>
+      <Button type="submit" className="w-full" disabled={rating === 0 || loading || photoChecking || !!photoError}>
         {loading ? "등록 중..." : "리뷰 등록하기"}
       </Button>
     </form>
