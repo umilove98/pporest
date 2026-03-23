@@ -17,12 +17,11 @@ const NOUNS = [
 ];
 
 /**
- * 랜덤 닉네임 생성 (형용사 + 명사 + 3자리 숫자)
- * 예: "맑은 숲지기 427", "푸른 산책자 183"
+ * 랜덤 닉네임 기본형 생성 (형용사 + 명사, 번호 없음)
+ * 예: "맑은 숲지기", "푸른 산책자"
  */
-export function generateRandomNickname(): string {
+export function generateRandomNicknameBase(): string {
   const adj = ADJECTIVES[Math.floor(Math.random() * ADJECTIVES.length)];
   const noun = NOUNS[Math.floor(Math.random() * NOUNS.length)];
-  const num = Math.floor(Math.random() * 900) + 100; // 100~999
-  return `${adj} ${noun} ${num}`;
+  return `${adj} ${noun}`;
 }

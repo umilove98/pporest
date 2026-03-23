@@ -4,6 +4,37 @@ import { EditRequest, PublicRestroom, Restroom, Review, UserRestroom } from "./t
 // === 유저 프로필 (닉네임) ===
 
 /**
+ * DB 중복 검사 기반 유니크 닉네임 생성
+ * "맑은 숲지기" 가 이미 있으면 "맑은 숲지기 2", "맑은 숲지기 3" ... 순차 부여
+ */
+export async function generateUniqueNickname(): Promise<string> {
+  const { generateRandomNicknameBase } = await import("./nickname");
+  const base = generateRandomNicknameBase(); // "맑은 숲지기" (번호 없음)
+
+  // 동일 base로 시작하는 닉네임 중 가장 큰 번호 조회
+  const { data } = await supabase
+    .from("user_profiles")
+    .select("nickname")
+    .like("nickname", `${base}%`);
+
+  if (!data || data.length === 0) return base;
+
+  // 기존 번호 파싱
+  let maxNum = 0;
+  for (const row of data) {
+    if (row.nickname === base) {
+      maxNum = Math.max(maxNum, 1);
+    } else {
+      const suffix = row.nickname.slice(base.length).trim();
+      const num = parseInt(suffix, 10);
+      if (!isNaN(num)) maxNum = Math.max(maxNum, num);
+    }
+  }
+
+  return `${base} ${maxNum + 1}`;
+}
+
+/**
  * 유저 닉네임 조회 — 없으면 user_metadata에서 가져와 프로필 생성
  * user_metadata에 항상 닉네임을 백업하여 DB 실패 시에도 동일 닉네임 유지
  */
@@ -21,14 +52,12 @@ export async function getOrCreateNickname(userId: string): Promise<string> {
   const { data: { user } } = await supabase.auth.getUser();
   const metaNickname = user?.user_metadata?.nickname;
 
-  // 3) metadata에도 없으면 랜덤 생성 후 metadata에 저장 (영구 고정)
+  // 3) metadata에도 없으면 유니크 랜덤 생성 후 metadata에 저장 (영구 고정)
   let nickname: string;
   if (metaNickname) {
     nickname = metaNickname;
   } else {
-    const { generateRandomNickname } = await import("./nickname");
-    nickname = generateRandomNickname();
-    // metadata에 저장하여 다음 조회 시 동일 닉네임 반환 보장
+    nickname = await generateUniqueNickname();
     await supabase.auth.updateUser({ data: { nickname } });
   }
 

@@ -5,7 +5,7 @@ import { Mail, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { signIn, signUp } from "@/lib/auth";
-import { generateRandomNickname } from "@/lib/nickname";
+import { generateUniqueNickname } from "@/lib/api";
 
 /** Supabase 에러 메시지 한글화 */
 function translateError(message: string): string {
@@ -131,7 +131,10 @@ export function LoginForm() {
               variant="outline"
               size="sm"
               className="shrink-0 gap-1 text-xs"
-              onClick={() => setNickname(generateRandomNickname())}
+              onClick={async () => {
+                const unique = await generateUniqueNickname();
+                setNickname(unique);
+              }}
             >
               <Sparkles className="h-3.5 w-3.5" />
               자동생성
