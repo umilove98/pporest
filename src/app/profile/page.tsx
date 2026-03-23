@@ -152,9 +152,9 @@ export default function ProfilePage() {
             {showOnboarding && !showPreferenceSurvey && (
               <Card className="mt-6 w-full border-emerald-300 bg-emerald-50/80 dark:border-emerald-700 dark:bg-emerald-950/20">
                 <CardContent className="p-4 text-center">
-                  <p className="text-sm font-semibold">환영합니다! 🎉</p>
+                  <p className="text-sm font-semibold">취향을 설정하면</p>
                   <p className="mt-1 text-xs text-muted-foreground">
-                    취향을 설정하면 화장실마다 나만의 S~C 티어를 볼 수 있어요
+                    나만의 화장실 등급을 볼 수 있어요
                   </p>
                   <Button
                     size="sm"
