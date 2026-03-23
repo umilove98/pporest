@@ -8,6 +8,7 @@ import { RestroomCard } from "@/components/restroom/restroom-card";
 import { useAuth } from "@/components/auth/auth-provider";
 import { searchPublicRestroomsWithStats, searchUserRestroomsDB, userRestroomToRestroom, enrichRestroomsWithStats, getUserPreferences, calculateTiers } from "@/lib/api";
 import { Restroom, RestroomTier, UserPreferences } from "@/lib/types";
+import { getCachedTiers, setCachedTiers } from "@/lib/tier-cache";
 
 const filters = ["장애인 접근 가능", "기저귀 교환대", "24시간"];
 const TIER_FILTERS: RestroomTier[] = ["S", "A", "B", "C"];
@@ -53,7 +54,15 @@ export default function SearchPage() {
       const all = [...publicRestrooms, ...enrichedUser];
       setRestrooms(all);
       if (preferences) {
-        setTierMap(calculateTiers(all, preferences));
+        const ids = all.map((r) => r.id);
+        const cached = getCachedTiers(ids, preferences);
+        const uncached = all.filter((r) => !cached.has(r.id));
+        const computed = calculateTiers(uncached, preferences);
+        if (computed.size > 0) setCachedTiers(computed, preferences);
+        const merged = new Map<string, RestroomTier>();
+        cached.forEach((v, k) => merged.set(k, v));
+        computed.forEach((v, k) => merged.set(k, v));
+        setTierMap(merged);
       }
     } catch {
       setRestrooms([]);
@@ -127,7 +136,7 @@ export default function SearchPage() {
         ) : displayRestrooms.length > 0 ? (
           <div className="flex flex-col gap-3 pb-4">
             {displayRestrooms.map((restroom) => (
-              <RestroomCard key={restroom.id} restroom={restroom} tier={tierMap.get(restroom.id)} />
+              <RestroomCard key={restroom.id} restroom={restroom} tier={tierMap.get(restroom.id)} preferences={preferences} />
             ))}
           </div>
         ) : (

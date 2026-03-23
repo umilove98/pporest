@@ -11,6 +11,7 @@ import { useAuth } from "@/components/auth/auth-provider";
 import { getPublicRestroomsWithStatsByBounds, getUserRestroomsByBounds, userRestroomToRestroom, enrichRestroomsWithStats, getUserPreferences, calculateTiers } from "@/lib/api";
 import { Restroom, RestroomTier, UserPreferences } from "@/lib/types";
 import { getDistanceMeters, formatDistance } from "@/lib/utils";
+import { getCachedTiers, setCachedTiers } from "@/lib/tier-cache";
 
 const MAX_LIST_ITEMS = 15;
 const MAX_MARKERS = 30;
@@ -157,9 +158,18 @@ export default function HomePage() {
         setVisibleRestrooms(listItems);
         setLoading(false);
 
-        // 티어 계산
+        // 티어 계산 (캐시 우선)
         if (preferences) {
-          setTierMap(calculateTiers(allRestrooms, preferences));
+          const ids = allRestrooms.map((r) => r.id);
+          const cached = getCachedTiers(ids, preferences);
+          const uncachedRestrooms = allRestrooms.filter((r) => !cached.has(r.id));
+          const computed = calculateTiers(uncachedRestrooms, preferences);
+          if (computed.size > 0) setCachedTiers(computed, preferences);
+          // 합치기
+          const merged = new Map<string, RestroomTier>();
+          cached.forEach((v, k) => merged.set(k, v));
+          computed.forEach((v, k) => merged.set(k, v));
+          setTierMap(merged);
         }
 
         // 유저 화장실만 별점 비동기 보강 (공공 화장실은 RPC에서 이미 포함)
@@ -273,7 +283,7 @@ export default function HomePage() {
         ) : (
           <div className="flex flex-col gap-3 pb-4">
             {displayRestrooms.map((restroom) => (
-              <RestroomCard key={restroom.id} restroom={restroom} tier={tierMap.get(restroom.id)} />
+              <RestroomCard key={restroom.id} restroom={restroom} tier={tierMap.get(restroom.id)} preferences={preferences} />
             ))}
           </div>
         )}
