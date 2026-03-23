@@ -1,7 +1,14 @@
-import { Camera, User } from "lucide-react";
+"use client";
+
+import { useState } from "react";
+import { Camera, User, Pencil, Trash2, Check, X } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import { StarRating } from "./star-rating";
 import { Review } from "@/lib/types";
+import { useAuth } from "@/components/auth/auth-provider";
+import { updateReview, deleteReview } from "@/lib/api";
 
 function formatDateTime(iso: string): string {
   const d = new Date(iso);
@@ -10,7 +17,48 @@ function formatDateTime(iso: string): string {
   return `${d.getFullYear()}.${pad(d.getMonth() + 1)}.${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 }
 
-export function ReviewCard({ review }: { review: Review }) {
+interface ReviewCardProps {
+  review: Review;
+  onUpdated?: () => void;
+}
+
+export function ReviewCard({ review, onUpdated }: ReviewCardProps) {
+  const { user } = useAuth();
+  const isOwner = user?.id === review.user_id;
+
+  const [editing, setEditing] = useState(false);
+  const [editRating, setEditRating] = useState(review.rating);
+  const [editComment, setEditComment] = useState(review.comment);
+  const [saving, setSaving] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
+  const handleSave = async () => {
+    if (editRating === 0) return;
+    setSaving(true);
+    try {
+      await updateReview(review.id, { rating: editRating, comment: editComment });
+      setEditing(false);
+      onUpdated?.();
+    } catch {
+      alert("리뷰 수정에 실패했습니다.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    setSaving(true);
+    try {
+      await deleteReview(review.id);
+      onUpdated?.();
+    } catch {
+      alert("리뷰 삭제에 실패했습니다.");
+    } finally {
+      setSaving(false);
+      setConfirmDelete(false);
+    }
+  };
+
   return (
     <Card>
       <CardContent className="p-4">
@@ -32,13 +80,92 @@ export function ReviewCard({ review }: { review: Review }) {
               <span className="text-sm font-medium">{review.user_name}</span>
               <span className="text-xs text-muted-foreground">{formatDateTime(review.created_at)}</span>
             </div>
-            <StarRating rating={review.rating} />
+            {editing ? (
+              <StarRating rating={editRating} size="sm" onChange={setEditRating} />
+            ) : (
+              <StarRating rating={review.rating} />
+            )}
           </div>
         </div>
-        <p className="mt-3 text-sm leading-relaxed">{review.comment}</p>
-        {review.has_photo && (
-          <div className="mt-3 flex h-24 w-24 items-center justify-center rounded-md bg-muted">
-            <Camera className="h-6 w-6 text-muted-foreground" />
+
+        {editing ? (
+          <div className="mt-3 space-y-2">
+            <Textarea
+              value={editComment}
+              onChange={(e) => setEditComment(e.target.value)}
+              rows={3}
+              className="text-sm"
+            />
+            <div className="flex gap-2 justify-end">
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => {
+                  setEditing(false);
+                  setEditRating(review.rating);
+                  setEditComment(review.comment);
+                }}
+                disabled={saving}
+              >
+                <X className="h-3.5 w-3.5 mr-1" />
+                취소
+              </Button>
+              <Button
+                size="sm"
+                onClick={handleSave}
+                disabled={saving || editRating === 0}
+              >
+                <Check className="h-3.5 w-3.5 mr-1" />
+                {saving ? "저장 중..." : "저장"}
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <p className="mt-3 text-sm leading-relaxed">{review.comment}</p>
+            {review.has_photo && (
+              <div className="mt-3 flex h-24 w-24 items-center justify-center rounded-md bg-muted">
+                <Camera className="h-6 w-6 text-muted-foreground" />
+              </div>
+            )}
+          </>
+        )}
+
+        {/* 본인 리뷰: 수정/삭제 버튼 */}
+        {isOwner && !editing && (
+          <div className="mt-2 flex justify-end gap-1">
+            {confirmDelete ? (
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-red-500">삭제할까요?</span>
+                <Button size="sm" variant="destructive" onClick={handleDelete} disabled={saving} className="h-7 text-xs px-2">
+                  {saving ? "삭제 중..." : "확인"}
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => setConfirmDelete(false)} disabled={saving} className="h-7 text-xs px-2">
+                  취소
+                </Button>
+              </div>
+            ) : (
+              <>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 text-xs px-2 text-muted-foreground"
+                  onClick={() => setEditing(true)}
+                >
+                  <Pencil className="h-3 w-3 mr-1" />
+                  수정
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="h-7 text-xs px-2 text-muted-foreground"
+                  onClick={() => setConfirmDelete(true)}
+                >
+                  <Trash2 className="h-3 w-3 mr-1" />
+                  삭제
+                </Button>
+              </>
+            )}
           </div>
         )}
       </CardContent>

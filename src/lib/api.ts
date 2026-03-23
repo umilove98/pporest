@@ -555,6 +555,33 @@ export async function createReview(review: {
 }
 
 /**
+ * 리뷰 수정 (본인 리뷰만 — RLS로 보장)
+ */
+export async function updateReview(
+  reviewId: string,
+  updates: { rating: number; comment: string }
+): Promise<void> {
+  const { error } = await supabase
+    .from("reviews")
+    .update(updates)
+    .eq("id", reviewId);
+
+  if (error) throw error;
+}
+
+/**
+ * 리뷰 삭제 (본인 리뷰만 — RLS로 보장)
+ */
+export async function deleteReview(reviewId: string): Promise<void> {
+  const { error } = await supabase
+    .from("reviews")
+    .delete()
+    .eq("id", reviewId);
+
+  if (error) throw error;
+}
+
+/**
  * 특정 사용자의 리뷰 목록 (에러 시 빈 배열)
  */
 export async function getReviewsByUserId(userId: string): Promise<Review[]> {
