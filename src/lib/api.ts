@@ -456,6 +456,32 @@ export async function createUserRestroom(restroom: {
 // === DB: 리뷰 ===
 
 /**
+ * 리뷰 목록에 user_profiles의 실시간 닉네임/아바타를 매핑
+ */
+async function enrichReviewsWithProfiles(reviews: Review[]): Promise<Review[]> {
+  if (reviews.length === 0) return reviews;
+
+  const userIds = Array.from(new Set(reviews.map((r) => r.user_id)));
+  const { data: profiles } = await supabase
+    .from("user_profiles")
+    .select("user_id, nickname, avatar_url")
+    .in("user_id", userIds);
+
+  const profileMap = new Map(
+    (profiles ?? []).map((p) => [p.user_id, p])
+  );
+
+  return reviews.map((r) => {
+    const profile = profileMap.get(r.user_id);
+    return {
+      ...r,
+      user_name: profile?.nickname ?? r.user_name,
+      avatar_url: profile?.avatar_url ?? null,
+    };
+  });
+}
+
+/**
  * 특정 화장실의 리뷰 목록
  */
 export async function getReviewsByKey(restroomKey: string): Promise<Review[]> {
@@ -467,7 +493,7 @@ export async function getReviewsByKey(restroomKey: string): Promise<Review[]> {
       .order("created_at", { ascending: false });
 
     if (error) return [];
-    return (data ?? []) as Review[];
+    return enrichReviewsWithProfiles((data ?? []) as Review[]);
   } catch {
     return [];
   }
@@ -507,7 +533,7 @@ export async function getReviewsByUserId(userId: string): Promise<Review[]> {
       .order("created_at", { ascending: false });
 
     if (error) return [];
-    return (data ?? []) as Review[];
+    return enrichReviewsWithProfiles((data ?? []) as Review[]);
   } catch {
     return [];
   }

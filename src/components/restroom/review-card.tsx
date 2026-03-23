@@ -15,8 +15,17 @@ export function ReviewCard({ review }: { review: Review }) {
     <Card>
       <CardContent className="p-4">
         <div className="flex items-center gap-3">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted">
-            <User className="h-4 w-4 text-muted-foreground" />
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted">
+            {review.avatar_url ? (
+              /* eslint-disable-next-line @next/next/no-img-element */
+              <img
+                src={review.avatar_url}
+                alt={review.user_name}
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              <User className="h-4 w-4 text-muted-foreground" />
+            )}
           </div>
           <div className="flex-1">
             <div className="flex items-center justify-between">
