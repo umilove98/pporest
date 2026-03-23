@@ -217,16 +217,45 @@ export async function getUserRestroomById(id: string): Promise<UserRestroom | nu
 }
 
 /**
- * ID로 화장실 조회 (공공 → 유저 순으로 탐색, 통합 Restroom 반환)
+ * 특정 화장실의 리뷰 통계 (평균 별점, 건수) 실시간 계산
+ */
+export async function getReviewStats(restroomId: string): Promise<{ rating: number; review_count: number }> {
+  const { data, error } = await supabase
+    .from("reviews")
+    .select("rating")
+    .eq("restroom_id", restroomId);
+
+  if (error || !data || data.length === 0) {
+    return { rating: 0, review_count: 0 };
+  }
+
+  const sum = data.reduce((acc, r) => acc + r.rating, 0);
+  return {
+    rating: Math.round((sum / data.length) * 10) / 10,
+    review_count: data.length,
+  };
+}
+
+/**
+ * ID로 화장실 조회 (공공 → 유저 순으로 탐색, 통합 Restroom 반환 + 리뷰 통계 포함)
  */
 export async function getRestroomById(id: string): Promise<Restroom | null> {
   // 공공 화장실 먼저 조회
   const pub = await getPublicRestroomById(id);
-  if (pub) return toRestroom(pub);
+  if (pub) {
+    const stats = await getReviewStats(id);
+    return toRestroom(pub, stats);
+  }
 
   // 유저 등록 화장실 조회
-  const user = await getUserRestroomById(id);
-  if (user) return userRestroomToRestroom(user);
+  const ur = await getUserRestroomById(id);
+  if (ur) {
+    const stats = await getReviewStats(id);
+    const restroom = userRestroomToRestroom(ur);
+    restroom.rating = stats.rating;
+    restroom.review_count = stats.review_count;
+    return restroom;
+  }
 
   return null;
 }
