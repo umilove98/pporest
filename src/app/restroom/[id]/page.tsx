@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft, MapPin, Clock, Accessibility, Baby, Droplets, Banknote, PenLine, CheckCircle, Bell, Video, DoorOpen, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -11,19 +11,32 @@ import { StarRating } from "@/components/restroom/star-rating";
 import { PhotoGrid } from "@/components/restroom/photo-grid";
 import { ReviewCard } from "@/components/restroom/review-card";
 import { Input } from "@/components/ui/input";
-import { getRestroomById, getReviewsByKey, createEditRequest, getSafetyCount, checkSafety, hasCheckedSafetyToday, getUserPreferences, calculateTier } from "@/lib/api";
+import { getRestroomDetail, getReviewsByKey, getRestroomById, createEditRequest, checkSafety } from "@/lib/api";
 import { TierBadge } from "@/components/preference/tier-badge";
 import { useAuth } from "@/components/auth/auth-provider";
 import { Restroom, Review, ReviewSentiment, RestroomTier } from "@/lib/types";
-import { getCachedTier, setCachedTier } from "@/lib/tier-cache";
 
 export default function RestroomDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user } = useAuth();
+
+  // 티어: URL param에서 가져옴 (목록에서 이미 계산된 값)
+  const tierFromList = (searchParams.get("tier") as RestroomTier) || null;
+
   const [restroom, setRestroom] = useState<Restroom | null>(null);
-  const [reviews, setReviews] = useState<Review[]>([]);
   const [loading, setLoading] = useState(true);
+  const [safetyCount, setSafetyCount] = useState(0);
+  const [alreadyChecked, setAlreadyChecked] = useState(false);
+  const [safetyAnim, setSafetyAnim] = useState(false);
+
+  // 리뷰: 별도 로딩 (점진적)
+  const [reviews, setReviews] = useState<Review[]>([]);
+  const [reviewsLoading, setReviewsLoading] = useState(true);
+  const [sentimentFilter, setSentimentFilter] = useState<ReviewSentiment | "all">("all");
+
+  // 수정 요청 모달
   const [showEditModal, setShowEditModal] = useState(false);
   const [editField, setEditField] = useState("");
   const [editCurrentValue, setEditCurrentValue] = useState("");
@@ -31,11 +44,32 @@ export default function RestroomDetailPage() {
   const [editReason, setEditReason] = useState("");
   const [editSubmitting, setEditSubmitting] = useState(false);
   const [editSubmitted, setEditSubmitted] = useState(false);
-  const [safetyCount, setSafetyCount] = useState(0);
-  const [alreadyChecked, setAlreadyChecked] = useState(false);
-  const [safetyAnim, setSafetyAnim] = useState(false);
-  const [tier, setTier] = useState<RestroomTier>(null);
-  const [sentimentFilter, setSentimentFilter] = useState<ReviewSentiment | "all">("all");
+
+  // Phase 1: RPC로 화장실 정보 + 안전확인 한방 로딩
+  // Phase 2: 리뷰 병렬 로딩 (스켈레톤 표시)
+  useEffect(() => {
+    // 두 요청을 동시에 시작
+    const detailPromise = getRestroomDetail(id, user?.id);
+    const reviewsPromise = getReviewsByKey(id);
+
+    // Phase 1: 화장실 정보 먼저 표시
+    detailPromise
+      .then((result) => {
+        if (result) {
+          setRestroom(result.restroom);
+          setSafetyCount(result.safetyCount);
+          setAlreadyChecked(result.alreadyChecked);
+        }
+      })
+      .catch(() => setRestroom(null))
+      .finally(() => setLoading(false));
+
+    // Phase 2: 리뷰 도착하면 채움
+    reviewsPromise
+      .then((revs) => setReviews(revs))
+      .catch(() => setReviews([]))
+      .finally(() => setReviewsLoading(false));
+  }, [id, user?.id]);
 
   const refreshData = async () => {
     try {
@@ -49,50 +83,6 @@ export default function RestroomDetailPage() {
       // 새로고침 실패 시 무시
     }
   };
-
-  useEffect(() => {
-    async function fetchData() {
-      try {
-        const found = await getRestroomById(id);
-        setRestroom(found);
-
-        const revs = await getReviewsByKey(id);
-        setReviews(revs);
-      } catch {
-        setRestroom(null);
-        setReviews([]);
-      } finally {
-        setLoading(false);
-      }
-    }
-    fetchData();
-  }, [id]);
-
-  // 티어 계산 (캐시 우선)
-  useEffect(() => {
-    if (!user || !restroom) { setTier(null); return; }
-    getUserPreferences(user.id).then((prefs) => {
-      if (!prefs) return;
-      const cached = getCachedTier(id, prefs);
-      if (cached !== undefined) { setTier(cached); return; }
-      const computed = calculateTier(restroom, prefs);
-      setTier(computed);
-      setCachedTier(id, computed, prefs);
-    }).catch(() => {});
-  }, [id, user, restroom]);
-
-  // 안전 확인 데이터 로드
-  useEffect(() => {
-    async function loadSafety() {
-      const [count, checked] = await Promise.all([
-        getSafetyCount(id),
-        user ? hasCheckedSafetyToday(id, user.id) : Promise.resolve(false),
-      ]);
-      setSafetyCount(count);
-      setAlreadyChecked(checked);
-    }
-    loadSafety();
-  }, [id, user]);
 
   const EDITABLE_FIELDS = [
     { key: "name", label: "화장실 이름" },
@@ -157,7 +147,7 @@ export default function RestroomDetailPage() {
         <Button variant="ghost" size="icon" onClick={() => router.back()}>
           <ChevronLeft className="h-5 w-5" />
         </Button>
-        {tier && <TierBadge tier={tier} />}
+        {tierFromList && <TierBadge tier={tierFromList} />}
         <h1 className="text-base font-semibold truncate">{restroom.name}</h1>
       </header>
 
@@ -437,60 +427,82 @@ export default function RestroomDetailPage() {
         {/* Reviews */}
         <div>
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-sm font-semibold">리뷰 ({reviews.length})</h2>
+            <h2 className="text-sm font-semibold">리뷰 ({reviewsLoading ? "..." : reviews.length})</h2>
           </div>
 
-          {/* 감성 필터 */}
-          {reviews.length > 0 && (
-            <div className="mb-3 flex gap-1.5">
-              {([
-                { key: "all" as const, label: "전체" },
-                { key: "positive" as const, label: "긍정" },
-                { key: "neutral" as const, label: "중립" },
-                { key: "negative" as const, label: "부정" },
-              ]).map(({ key, label }) => (
-                <Badge
-                  key={key}
-                  variant={sentimentFilter === key ? "default" : "outline"}
-                  className={`cursor-pointer text-xs ${
-                    sentimentFilter === key
-                      ? key === "positive" ? "bg-emerald-500 hover:bg-emerald-600"
-                        : key === "negative" ? "bg-red-500 hover:bg-red-600"
-                        : key === "neutral" ? "bg-slate-500 hover:bg-slate-600"
-                        : ""
-                      : ""
-                  }`}
-                  onClick={() => setSentimentFilter(key)}
-                >
-                  {label}
-                  {key !== "all" && (
-                    <span className="ml-1 opacity-70">
-                      {reviews.filter((r) => r.sentiment === key).length}
-                    </span>
-                  )}
-                </Badge>
+          {reviewsLoading ? (
+            <div className="flex flex-col gap-3">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="animate-pulse rounded-lg border p-4">
+                  <div className="flex items-center gap-2">
+                    <div className="h-8 w-8 rounded-full bg-muted" />
+                    <div className="flex-1 space-y-1.5">
+                      <div className="h-3 w-20 rounded bg-muted" />
+                      <div className="h-3 w-24 rounded bg-muted" />
+                    </div>
+                  </div>
+                  <div className="mt-3 space-y-1.5">
+                    <div className="h-3 w-full rounded bg-muted" />
+                    <div className="h-3 w-2/3 rounded bg-muted" />
+                  </div>
+                </div>
               ))}
             </div>
-          )}
+          ) : (
+            <>
+              {/* 감성 필터 */}
+              {reviews.length > 0 && (
+                <div className="mb-3 flex gap-1.5">
+                  {([
+                    { key: "all" as const, label: "전체" },
+                    { key: "positive" as const, label: "긍정" },
+                    { key: "neutral" as const, label: "중립" },
+                    { key: "negative" as const, label: "부정" },
+                  ]).map(({ key, label }) => (
+                    <Badge
+                      key={key}
+                      variant={sentimentFilter === key ? "default" : "outline"}
+                      className={`cursor-pointer text-xs ${
+                        sentimentFilter === key
+                          ? key === "positive" ? "bg-emerald-500 hover:bg-emerald-600"
+                            : key === "negative" ? "bg-red-500 hover:bg-red-600"
+                            : key === "neutral" ? "bg-slate-500 hover:bg-slate-600"
+                            : ""
+                          : ""
+                      }`}
+                      onClick={() => setSentimentFilter(key)}
+                    >
+                      {label}
+                      {key !== "all" && (
+                        <span className="ml-1 opacity-70">
+                          {reviews.filter((r) => r.sentiment === key).length}
+                        </span>
+                      )}
+                    </Badge>
+                  ))}
+                </div>
+              )}
 
-          <div className="flex flex-col gap-3">
-            {reviews
-              .filter((r) => sentimentFilter === "all" || r.sentiment === sentimentFilter)
-              .map((review) => (
-                <ReviewCard key={review.id} review={review} onUpdated={refreshData} />
-              ))}
-            {reviews.length === 0 && (
-              <p className="py-8 text-center text-sm text-muted-foreground">
-                아직 리뷰가 없습니다. 첫 리뷰를 남겨주세요!
-              </p>
-            )}
-            {reviews.length > 0 &&
-              reviews.filter((r) => sentimentFilter === "all" || r.sentiment === sentimentFilter).length === 0 && (
-              <p className="py-8 text-center text-sm text-muted-foreground">
-                해당 감성의 리뷰가 없습니다.
-              </p>
-            )}
-          </div>
+              <div className="flex flex-col gap-3">
+                {reviews
+                  .filter((r) => sentimentFilter === "all" || r.sentiment === sentimentFilter)
+                  .map((review) => (
+                    <ReviewCard key={review.id} review={review} onUpdated={refreshData} />
+                  ))}
+                {reviews.length === 0 && (
+                  <p className="py-8 text-center text-sm text-muted-foreground">
+                    아직 리뷰가 없습니다. 첫 리뷰를 남겨주세요!
+                  </p>
+                )}
+                {reviews.length > 0 &&
+                  reviews.filter((r) => sentimentFilter === "all" || r.sentiment === sentimentFilter).length === 0 && (
+                  <p className="py-8 text-center text-sm text-muted-foreground">
+                    해당 감성의 리뷰가 없습니다.
+                  </p>
+                )}
+              </div>
+            </>
+          )}
         </div>
 
       </div>

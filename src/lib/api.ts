@@ -403,6 +403,57 @@ export async function getRestroomById(id: string): Promise<Restroom | null> {
 }
 
 /**
+ * RPC: 상세 페이지용 화장실 + 리뷰통계 + 안전확인 한방 조회
+ */
+export interface RestroomDetailResult {
+  restroom: Restroom;
+  safetyCount: number;
+  alreadyChecked: boolean;
+}
+
+export async function getRestroomDetail(
+  restroomId: string,
+  userId?: string,
+): Promise<RestroomDetailResult | null> {
+  const { data, error } = await supabase.rpc("get_restroom_detail", {
+    p_restroom_id: restroomId,
+    p_user_id: userId ?? null,
+  });
+
+  if (error || !data) return null;
+
+  const d = data as {
+    public: PublicRestroom | null;
+    user: UserRestroom | null;
+    stats: { rating: number; review_count: number };
+    safety_count: number;
+    already_checked: boolean;
+  };
+
+  // review_count가 0이면 리뷰가 없는 것 — stats 보정
+  const stats = d.stats.review_count > 0
+    ? { rating: Number(d.stats.rating), review_count: d.stats.review_count }
+    : { rating: 0, review_count: 0 };
+
+  let restroom: Restroom | null = null;
+  if (d.public) {
+    restroom = toRestroom(d.public, stats);
+  } else if (d.user) {
+    restroom = userRestroomToRestroom(d.user);
+    restroom.rating = stats.rating;
+    restroom.review_count = stats.review_count;
+  }
+
+  if (!restroom) return null;
+
+  return {
+    restroom,
+    safetyCount: d.safety_count,
+    alreadyChecked: d.already_checked,
+  };
+}
+
+/**
  * bounds 내 승인된 유저 등록 화장실 조회
  */
 export async function getUserRestroomsByBounds(
