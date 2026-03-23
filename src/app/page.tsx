@@ -3,17 +3,22 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import Link from "next/link";
 import { MapPin, Plus } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { MapView, MapBounds, MarkerData } from "@/components/restroom/map-view";
 import { RestroomCard } from "@/components/restroom/restroom-card";
-import { getPublicRestroomsWithStatsByBounds, getUserRestroomsByBounds, userRestroomToRestroom, enrichRestroomsWithStats } from "@/lib/api";
-import { Restroom } from "@/lib/types";
+import { useAuth } from "@/components/auth/auth-provider";
+import { getPublicRestroomsWithStatsByBounds, getUserRestroomsByBounds, userRestroomToRestroom, enrichRestroomsWithStats, getUserPreferences, calculateTiers } from "@/lib/api";
+import { Restroom, RestroomTier, UserPreferences } from "@/lib/types";
 import { getDistanceMeters, formatDistance } from "@/lib/utils";
 
 const MAX_LIST_ITEMS = 15;
 const MAX_MARKERS = 30;
 
+const TIER_FILTERS: RestroomTier[] = ["S", "A", "B", "C"];
+
 export default function HomePage() {
+  const { user } = useAuth();
   const [location, setLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [locationReady, setLocationReady] = useState(false);
   const [currentAddress, setCurrentAddress] = useState<string | null>(null);
@@ -22,10 +27,23 @@ export default function HomePage() {
   const [visibleRestrooms, setVisibleRestrooms] = useState<Restroom[]>([]);
   const [loading, setLoading] = useState(false);
   const boundsRef = useRef<MapBounds | null>(null);
+  const [preferences, setPreferences] = useState<UserPreferences | null>(null);
+  const [tierMap, setTierMap] = useState<Map<string, RestroomTier>>(new Map());
+  const [tierFilter, setTierFilter] = useState<RestroomTier | null>(null);
 
   const handleBoundsChange = useCallback((bounds: MapBounds) => {
     setMapBounds(bounds);
   }, []);
+
+  // 유저 취향 로드
+  useEffect(() => {
+    if (!user) {
+      setPreferences(null);
+      setTierMap(new Map());
+      return;
+    }
+    getUserPreferences(user.id).then(setPreferences).catch(() => {});
+  }, [user]);
 
   // 1. 현재 위치 가져오기 — layout.tsx <head>에서 이미 시작된 GPS 결과 활용
   useEffect(() => {
@@ -139,6 +157,11 @@ export default function HomePage() {
         setVisibleRestrooms(listItems);
         setLoading(false);
 
+        // 티어 계산
+        if (preferences) {
+          setTierMap(calculateTiers(allRestrooms, preferences));
+        }
+
         // 유저 화장실만 별점 비동기 보강 (공공 화장실은 RPC에서 이미 포함)
         const userItems = listItems.filter((r) => r.source === "user");
         if (userItems.length > 0) {
@@ -161,7 +184,12 @@ export default function HomePage() {
       }
     }
     load();
-  }, [mapBounds, location]);
+  }, [mapBounds, location, preferences]);
+
+  // 티어 필터 적용
+  const displayRestrooms = tierFilter
+    ? visibleRestrooms.filter((r) => tierMap.get(r.id) === tierFilter)
+    : visibleRestrooms;
 
   return (
     <div className="flex flex-col">
@@ -194,7 +222,7 @@ export default function HomePage() {
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-sm font-semibold">주변 화장실</h2>
           <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">{visibleRestrooms.length}개</span>
+            <span className="text-xs text-muted-foreground">{displayRestrooms.length}개</span>
             <Link
               href="/restroom/new"
               className="flex items-center gap-1 rounded-full bg-emerald-500 px-2.5 py-1 text-xs font-medium text-white hover:bg-emerald-600"
@@ -204,6 +232,30 @@ export default function HomePage() {
             </Link>
           </div>
         </div>
+
+        {/* 티어 필터 (취향 설정 시에만 표시) */}
+        {preferences && tierMap.size > 0 && (
+          <div className="mb-3 flex flex-wrap gap-1.5">
+            <Badge
+              variant={tierFilter === null ? "default" : "outline"}
+              className="cursor-pointer text-xs"
+              onClick={() => setTierFilter(null)}
+            >
+              전체
+            </Badge>
+            {TIER_FILTERS.map((t) => (
+              <Badge
+                key={t}
+                variant={tierFilter === t ? "default" : "outline"}
+                className="cursor-pointer text-xs"
+                onClick={() => setTierFilter(tierFilter === t ? null : t)}
+              >
+                {t}티어
+              </Badge>
+            ))}
+          </div>
+        )}
+
         {!mapBounds ? (
           <div className="flex justify-center py-8">
             <p className="text-sm text-muted-foreground">지도가 준비되면 주변 화장실이 표시됩니다</p>
@@ -212,14 +264,16 @@ export default function HomePage() {
           <div className="flex justify-center py-8">
             <p className="text-sm text-muted-foreground">데이터 로딩 중...</p>
           </div>
-        ) : visibleRestrooms.length === 0 ? (
+        ) : displayRestrooms.length === 0 ? (
           <div className="flex justify-center py-8">
-            <p className="text-sm text-muted-foreground">지도 영역 내 화장실이 없습니다. 지도를 이동해보세요.</p>
+            <p className="text-sm text-muted-foreground">
+              {tierFilter ? `${tierFilter}티어 화장실이 없습니다` : "지도 영역 내 화장실이 없습니다. 지도를 이동해보세요."}
+            </p>
           </div>
         ) : (
           <div className="flex flex-col gap-3 pb-4">
-            {visibleRestrooms.map((restroom) => (
-              <RestroomCard key={restroom.id} restroom={restroom} />
+            {displayRestrooms.map((restroom) => (
+              <RestroomCard key={restroom.id} restroom={restroom} tier={tierMap.get(restroom.id)} />
             ))}
           </div>
         )}

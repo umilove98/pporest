@@ -3,9 +3,10 @@ import { MapPin } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { StarRating } from "./star-rating";
-import { Restroom } from "@/lib/types";
+import { TierBadge } from "@/components/preference/tier-badge";
+import { Restroom, RestroomTier } from "@/lib/types";
 
-export function RestroomCard({ restroom }: { restroom: Restroom }) {
+export function RestroomCard({ restroom, tier }: { restroom: Restroom; tier?: RestroomTier }) {
   return (
     <Link href={`/restroom/${restroom.id}`}>
       <Card className="transition-colors active:bg-accent/50">
@@ -13,6 +14,7 @@ export function RestroomCard({ restroom }: { restroom: Restroom }) {
           <div className="flex items-start justify-between">
             <div className="flex-1">
               <div className="flex items-center gap-2">
+                {tier && <TierBadge tier={tier} />}
                 <h3 className="font-semibold text-sm leading-tight">{restroom.name}</h3>
                 {restroom.is_open ? (
                   <Badge variant="secondary" className="shrink-0 bg-green-100 text-green-700 text-[10px] px-1.5 py-0">

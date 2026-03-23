@@ -5,16 +5,32 @@ import { Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { RestroomCard } from "@/components/restroom/restroom-card";
-import { searchPublicRestroomsWithStats, searchUserRestroomsDB, userRestroomToRestroom, enrichRestroomsWithStats } from "@/lib/api";
-import { Restroom } from "@/lib/types";
+import { useAuth } from "@/components/auth/auth-provider";
+import { searchPublicRestroomsWithStats, searchUserRestroomsDB, userRestroomToRestroom, enrichRestroomsWithStats, getUserPreferences, calculateTiers } from "@/lib/api";
+import { Restroom, RestroomTier, UserPreferences } from "@/lib/types";
 
 const filters = ["장애인 접근 가능", "기저귀 교환대", "24시간"];
+const TIER_FILTERS: RestroomTier[] = ["S", "A", "B", "C"];
 
 export default function SearchPage() {
+  const { user } = useAuth();
   const [query, setQuery] = useState("");
   const [activeFilters, setActiveFilters] = useState<string[]>([]);
   const [restrooms, setRestrooms] = useState<Restroom[]>([]);
   const [loading, setLoading] = useState(false);
+  const [preferences, setPreferences] = useState<UserPreferences | null>(null);
+  const [tierMap, setTierMap] = useState<Map<string, RestroomTier>>(new Map());
+  const [tierFilter, setTierFilter] = useState<RestroomTier | null>(null);
+
+  // 유저 취향 로드
+  useEffect(() => {
+    if (!user) {
+      setPreferences(null);
+      setTierMap(new Map());
+      return;
+    }
+    getUserPreferences(user.id).then(setPreferences).catch(() => {});
+  }, [user]);
 
   const toggleFilter = (filter: string) => {
     setActiveFilters((prev) =>
@@ -34,13 +50,17 @@ export default function SearchPage() {
       const enrichedUser = userRestrooms.length > 0
         ? await enrichRestroomsWithStats(userRestrooms)
         : userRestrooms;
-      setRestrooms([...publicRestrooms, ...enrichedUser]);
+      const all = [...publicRestrooms, ...enrichedUser];
+      setRestrooms(all);
+      if (preferences) {
+        setTierMap(calculateTiers(all, preferences));
+      }
     } catch {
       setRestrooms([]);
     } finally {
       setLoading(false);
     }
-  }, [query, activeFilters]);
+  }, [query, activeFilters, preferences]);
 
   useEffect(() => {
     // 검색어나 필터가 없으면 검색하지 않음
@@ -51,6 +71,11 @@ export default function SearchPage() {
     const timer = setTimeout(doSearch, 300);
     return () => clearTimeout(timer);
   }, [doSearch, query, activeFilters]);
+
+  // 티어 필터 적용
+  const displayRestrooms = tierFilter
+    ? restrooms.filter((r) => tierMap.get(r.id) === tierFilter)
+    : restrooms;
 
   return (
     <div className="flex flex-col">
@@ -76,6 +101,21 @@ export default function SearchPage() {
               {filter}
             </Badge>
           ))}
+          {preferences && tierMap.size > 0 && (
+            <>
+              <span className="mx-0.5 self-center text-muted-foreground/40">|</span>
+              {TIER_FILTERS.map((t) => (
+                <Badge
+                  key={t}
+                  variant={tierFilter === t ? "default" : "outline"}
+                  className="cursor-pointer text-xs"
+                  onClick={() => setTierFilter(tierFilter === t ? null : t)}
+                >
+                  {t}티어
+                </Badge>
+              ))}
+            </>
+          )}
         </div>
       </header>
 
@@ -84,16 +124,18 @@ export default function SearchPage() {
           <div className="flex justify-center py-8">
             <p className="text-sm text-muted-foreground">검색 중...</p>
           </div>
-        ) : restrooms.length > 0 ? (
+        ) : displayRestrooms.length > 0 ? (
           <div className="flex flex-col gap-3 pb-4">
-            {restrooms.map((restroom) => (
-              <RestroomCard key={restroom.id} restroom={restroom} />
+            {displayRestrooms.map((restroom) => (
+              <RestroomCard key={restroom.id} restroom={restroom} tier={tierMap.get(restroom.id)} />
             ))}
           </div>
         ) : (
           <div className="flex flex-col items-center gap-3 py-12 text-muted-foreground">
             <Search className="h-8 w-8" />
-            <p className="text-sm">검색 결과가 없습니다</p>
+            <p className="text-sm">
+              {tierFilter ? `${tierFilter}티어 검색 결과가 없습니다` : "검색 결과가 없습니다"}
+            </p>
           </div>
         )}
       </div>

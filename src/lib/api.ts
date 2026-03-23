@@ -1,5 +1,5 @@
 import { supabase } from "./supabase";
-import { EditRequest, PublicRestroom, Restroom, Review, UserRestroom } from "./types";
+import { EditRequest, PreferenceKey, PublicRestroom, Restroom, RestroomTier, Review, UserPreferences, UserRestroom } from "./types";
 
 // === 유저 프로필 (닉네임) ===
 
@@ -819,4 +819,157 @@ export async function hasCheckedSafetyToday(restroomId: string, userId: string):
 
   if (error) return false;
   return (count ?? 0) > 0;
+}
+
+// === 사용자 취향 설문 ===
+
+const PREFERENCE_KEYS: PreferenceKey[] = [
+  "cleanliness", "gender_separated", "bidet", "stall_count", "accessibility", "safety",
+];
+
+/**
+ * 사용자 취향 조회
+ */
+export async function getUserPreferences(userId: string): Promise<UserPreferences | null> {
+  const { data, error } = await supabase
+    .from("user_preferences")
+    .select("*")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (error || !data) return null;
+  return data as UserPreferences;
+}
+
+/**
+ * 사용자 취향 저장 (upsert)
+ */
+export async function saveUserPreferences(prefs: UserPreferences): Promise<void> {
+  const { error } = await supabase
+    .from("user_preferences")
+    .upsert({
+      user_id: prefs.user_id,
+      cleanliness: prefs.cleanliness,
+      gender_separated: prefs.gender_separated,
+      bidet: prefs.bidet,
+      stall_count: prefs.stall_count,
+      accessibility: prefs.accessibility,
+      safety: prefs.safety,
+      updated_at: new Date().toISOString(),
+    });
+
+  if (error) throw error;
+}
+
+/**
+ * 사용자 취향 설정 여부
+ */
+export async function hasUserPreferences(userId: string): Promise<boolean> {
+  const { count, error } = await supabase
+    .from("user_preferences")
+    .select("*", { count: "exact", head: true })
+    .eq("user_id", userId);
+
+  if (error) return false;
+  return (count ?? 0) > 0;
+}
+
+// === 티어 계산 ===
+
+/**
+ * 화장실 정보 + 사용자 취향 → 개인 티어 (S/A/B/C)
+ *
+ * 각 항목별 점수(0~1)를 계산하고, 우선순위 가중치로 가중평균.
+ * 가중치: priority 1 → 6점, priority 2 → 5점, ... priority 6 → 1점
+ * 최종 점수: 0~1 → S(≥0.8), A(≥0.6), B(≥0.4), C(<0.4)
+ */
+export function calculateTier(restroom: Restroom, prefs: UserPreferences): RestroomTier {
+  // 활성화된 항목만 (priority가 null이 아닌 것)
+  const activeKeys = PREFERENCE_KEYS.filter((k) => prefs[k] != null);
+  if (activeKeys.length === 0) return null;
+
+  let weightedSum = 0;
+  let totalWeight = 0;
+
+  for (const key of activeKeys) {
+    const priority = prefs[key]!;
+    const weight = (PREFERENCE_KEYS.length + 1) - priority; // priority 1 → 6, priority 6 → 1
+    const score = getItemScore(restroom, key);
+    weightedSum += score * weight;
+    totalWeight += weight;
+  }
+
+  if (totalWeight === 0) return null;
+
+  const finalScore = weightedSum / totalWeight;
+
+  if (finalScore >= 0.8) return "S";
+  if (finalScore >= 0.6) return "A";
+  if (finalScore >= 0.4) return "B";
+  return "C";
+}
+
+/**
+ * 화장실의 특정 항목 점수 (0~1)
+ */
+function getItemScore(restroom: Restroom, key: PreferenceKey): number {
+  switch (key) {
+    case "cleanliness":
+      // 별점 기반: 5점 → 1.0, 0점 → 0.0
+      return restroom.rating > 0 ? restroom.rating / 5 : 0.5; // 리뷰 없으면 중립
+
+    case "gender_separated":
+      if (restroom.gender_type === "separated") return 1.0;
+      if (restroom.gender_type === "mixed") return 0.2;
+      // 공공데이터: male_toilet과 female_toilet 모두 있으면 분리로 추정
+      if ((restroom.male_toilet ?? 0) > 0 && (restroom.female_toilet ?? 0) > 0) return 0.8;
+      return 0.5; // 정보 없음 → 중립
+
+    case "bidet":
+      if (restroom.has_bidet) return 1.0;
+      // 공공데이터는 비데 정보 없음 → 중립
+      if (restroom.source === "public_data") return 0.4;
+      return 0.1; // 유저 등록인데 비데 없음
+
+    case "stall_count": {
+      // 총 칸 수 기반 (많을수록 좋음)
+      const maleStalls = restroom.male_stalls ?? restroom.male_toilet ?? 0;
+      const femaleStalls = restroom.female_stalls ?? restroom.female_toilet ?? 0;
+      const total = maleStalls + femaleStalls + (restroom.male_urinal ?? 0);
+      if (total === 0) return 0.5; // 정보 없음
+      if (total >= 10) return 1.0;
+      if (total >= 6) return 0.8;
+      if (total >= 3) return 0.6;
+      return 0.3;
+    }
+
+    case "accessibility":
+      if (restroom.has_disabled_access) return 1.0;
+      return 0.2;
+
+    case "safety":
+      // 비상벨 + CCTV
+      if (restroom.emergency_bell && restroom.cctv) return 1.0;
+      if (restroom.emergency_bell || restroom.cctv) return 0.6;
+      return 0.3;
+
+    default:
+      return 0.5;
+  }
+}
+
+/**
+ * Restroom 목록에 티어를 일괄 매핑
+ */
+export function calculateTiers(
+  restrooms: Restroom[],
+  prefs: UserPreferences | null,
+): Map<string, RestroomTier> {
+  const map = new Map<string, RestroomTier>();
+  if (!prefs) return map;
+
+  for (const r of restrooms) {
+    map.set(r.id, calculateTier(r, prefs));
+  }
+  return map;
 }

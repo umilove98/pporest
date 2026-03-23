@@ -86,6 +86,23 @@ export interface Restroom {
   distance?: string;
 }
 
+/** 사용자 취향 설문 (화장실 선호도) */
+export interface UserPreferences {
+  user_id: string;
+  cleanliness: number | null;    // 청결도
+  gender_separated: number | null; // 남녀분리
+  bidet: number | null;          // 비데
+  stall_count: number | null;    // 칸 수 (대기시간)
+  accessibility: number | null;  // 장애인 접근성
+  safety: number | null;         // 안전 (비상벨/CCTV)
+}
+
+/** 취향 설문 항목 키 */
+export type PreferenceKey = "cleanliness" | "gender_separated" | "bidet" | "stall_count" | "accessibility" | "safety";
+
+/** 화장실 개인 티어 */
+export type RestroomTier = "S" | "A" | "B" | "C" | null;
+
 export interface Review {
   id: string;
   restroom_id: string; // public_data_id 또는 user_restroom uuid

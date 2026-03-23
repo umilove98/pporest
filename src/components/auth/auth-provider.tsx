@@ -3,13 +3,15 @@
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { User } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
-import { getOrCreateNickname, getAvatarUrl } from "@/lib/api";
+import { getOrCreateNickname, getAvatarUrl, hasUserPreferences } from "@/lib/api";
 
 interface AuthContextType {
   user: User | null;
   nickname: string | null;
   avatarUrl: string | null;
   loading: boolean;
+  needsPreferenceSurvey: boolean;
+  setNeedsPreferenceSurvey: (v: boolean) => void;
   refreshProfile: () => void;
 }
 
@@ -18,6 +20,8 @@ const AuthContext = createContext<AuthContextType>({
   nickname: null,
   avatarUrl: null,
   loading: true,
+  needsPreferenceSurvey: false,
+  setNeedsPreferenceSurvey: () => {},
   refreshProfile: () => {},
 });
 
@@ -26,6 +30,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [nickname, setNickname] = useState<string | null>(null);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [needsPreferenceSurvey, setNeedsPreferenceSurvey] = useState(false);
 
   const loadProfile = useCallback((userId: string) => {
     getOrCreateNickname(userId)
@@ -34,6 +39,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     getAvatarUrl(userId)
       .then(setAvatarUrl)
       .catch(() => setAvatarUrl(null));
+    hasUserPreferences(userId)
+      .then((has) => setNeedsPreferenceSurvey(!has))
+      .catch(() => {});
   }, []);
 
   const refreshProfile = useCallback(() => {
@@ -69,7 +77,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, nickname, avatarUrl, loading, refreshProfile }}>
+    <AuthContext.Provider value={{ user, nickname, avatarUrl, loading, needsPreferenceSurvey, setNeedsPreferenceSurvey, refreshProfile }}>
       {children}
     </AuthContext.Provider>
   );
