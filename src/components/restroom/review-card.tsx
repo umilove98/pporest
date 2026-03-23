@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Camera, User, Pencil, Trash2, Check, X } from "lucide-react";
+import { Camera, User, Check, X } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -152,7 +152,6 @@ export function ReviewCard({ review, onUpdated }: ReviewCardProps) {
                   className="h-7 text-xs px-2 text-muted-foreground"
                   onClick={() => setEditing(true)}
                 >
-                  <Pencil className="h-3 w-3 mr-1" />
                   수정
                 </Button>
                 <Button
@@ -161,7 +160,6 @@ export function ReviewCard({ review, onUpdated }: ReviewCardProps) {
                   className="h-7 text-xs px-2 text-muted-foreground"
                   onClick={() => setConfirmDelete(true)}
                 >
-                  <Trash2 className="h-3 w-3 mr-1" />
                   삭제
                 </Button>
               </>
