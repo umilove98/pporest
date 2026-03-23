@@ -107,6 +107,35 @@ export function toRestroom(
 }
 
 /**
+ * ID로 유저 등록 화장실 단건 조회
+ */
+export async function getUserRestroomById(id: string): Promise<UserRestroom | null> {
+  const { data, error } = await supabase
+    .from("user_restrooms")
+    .select("*")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (error) return null;
+  return data as UserRestroom | null;
+}
+
+/**
+ * ID로 화장실 조회 (공공 → 유저 순으로 탐색, 통합 Restroom 반환)
+ */
+export async function getRestroomById(id: string): Promise<Restroom | null> {
+  // 공공 화장실 먼저 조회
+  const pub = await getPublicRestroomById(id);
+  if (pub) return toRestroom(pub);
+
+  // 유저 등록 화장실 조회
+  const user = await getUserRestroomById(id);
+  if (user) return userRestroomToRestroom(user);
+
+  return null;
+}
+
+/**
  * bounds 내 승인된 유저 등록 화장실 조회
  */
 export async function getUserRestroomsByBounds(

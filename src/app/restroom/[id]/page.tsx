@@ -11,7 +11,7 @@ import { StarRating } from "@/components/restroom/star-rating";
 import { PhotoGrid } from "@/components/restroom/photo-grid";
 import { ReviewCard } from "@/components/restroom/review-card";
 import { Input } from "@/components/ui/input";
-import { getPublicRestroomById, toRestroom, getReviewsByKey, createEditRequest, getSafetyCount, checkSafety, hasCheckedSafetyToday } from "@/lib/api";
+import { getRestroomById, getReviewsByKey, createEditRequest, getSafetyCount, checkSafety, hasCheckedSafetyToday } from "@/lib/api";
 import { useAuth } from "@/components/auth/auth-provider";
 import { Restroom, Review } from "@/lib/types";
 
@@ -36,12 +36,8 @@ export default function RestroomDetailPage() {
   useEffect(() => {
     async function fetchData() {
       try {
-        const found = await getPublicRestroomById(id);
-        if (found) {
-          setRestroom(toRestroom(found));
-        } else {
-          setRestroom(null);
-        }
+        const found = await getRestroomById(id);
+        setRestroom(found);
 
         const revs = await getReviewsByKey(id);
         setReviews(revs);

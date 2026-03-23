@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ReviewForm } from "@/components/restroom/review-form";
-import { getPublicRestroomById } from "@/lib/api";
+import { getRestroomById } from "@/lib/api";
 
 export default function WriteReviewPage() {
   const { id } = useParams<{ id: string }>();
@@ -13,7 +13,7 @@ export default function WriteReviewPage() {
   const [restroomName, setRestroomName] = useState("");
 
   useEffect(() => {
-    getPublicRestroomById(id)
+    getRestroomById(id)
       .then((found) => setRestroomName(found?.name ?? ""))
       .catch(() => setRestroomName(""));
   }, [id]);
