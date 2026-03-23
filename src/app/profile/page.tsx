@@ -14,7 +14,7 @@ import { getReviewsByUserId, checkIsAdmin } from "@/lib/api";
 import { Review } from "@/lib/types";
 
 export default function ProfilePage() {
-  const { user, loading } = useAuth();
+  const { user, nickname, loading } = useAuth();
   const [reviews, setReviews] = useState<Review[]>([]);
   const [reviewsLoading, setReviewsLoading] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -56,7 +56,7 @@ export default function ProfilePage() {
               <User className="h-10 w-10 text-muted-foreground" />
             </div>
             <h2 className="mt-3 text-lg font-semibold">
-              {user.user_metadata?.user_name || user.email}
+              {nickname || "로딩 중..."}
             </h2>
             <p className="text-sm text-muted-foreground">{user.email}</p>
 

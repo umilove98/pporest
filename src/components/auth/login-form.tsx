@@ -1,10 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { Mail } from "lucide-react";
+import { Mail, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { signIn, signUp } from "@/lib/auth";
+import { generateRandomNickname } from "@/lib/nickname";
 
 /** Supabase 에러 메시지 한글화 */
 function translateError(message: string): string {
@@ -49,7 +50,7 @@ export function LoginForm() {
   const [isSignUp, setIsSignUp] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [userName, setUserName] = useState("");
+  const [nickname, setNickname] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [emailSent, setEmailSent] = useState(false);
@@ -57,11 +58,17 @@ export function LoginForm() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+
+    if (isSignUp && !nickname.trim()) {
+      setError("활동 닉네임을 입력하거나 자동생성 해주세요.");
+      return;
+    }
+
     setLoading(true);
 
     try {
       if (isSignUp) {
-        const result = await signUp(email, password, userName);
+        const result = await signUp(email, password, nickname.trim());
         // Supabase는 이메일 인증이 필요하면 session이 null로 옴
         if (result.user && !result.session) {
           setEmailSent(true);
@@ -110,14 +117,29 @@ export function LoginForm() {
     <form onSubmit={handleSubmit} className="space-y-4">
       {isSignUp && (
         <div>
-          <label className="mb-1 block text-sm font-medium">닉네임</label>
-          <Input
-            type="text"
-            placeholder="닉네임을 입력하세요"
-            value={userName}
-            onChange={(e) => setUserName(e.target.value)}
-            required
-          />
+          <label className="mb-1 block text-sm font-medium">활동 닉네임</label>
+          <div className="flex gap-2">
+            <Input
+              type="text"
+              placeholder="닉네임을 입력하세요"
+              value={nickname}
+              onChange={(e) => setNickname(e.target.value)}
+              required
+            />
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="shrink-0 gap-1 text-xs"
+              onClick={() => setNickname(generateRandomNickname())}
+            >
+              <Sparkles className="h-3.5 w-3.5" />
+              자동생성
+            </Button>
+          </div>
+          <p className="mt-1 text-xs text-muted-foreground">
+            리뷰 등 활동 시 이 닉네임으로 표시됩니다
+          </p>
         </div>
       )}
 

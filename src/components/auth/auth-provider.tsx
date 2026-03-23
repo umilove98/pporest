@@ -3,20 +3,35 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { User } from "@supabase/supabase-js";
 import { supabase } from "@/lib/supabase";
+import { getOrCreateNickname } from "@/lib/api";
 
 interface AuthContextType {
   user: User | null;
+  nickname: string | null;
   loading: boolean;
 }
 
 const AuthContext = createContext<AuthContextType>({
   user: null,
+  nickname: null,
   loading: true,
 });
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
+  const [nickname, setNickname] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // 유저 변경 시 닉네임 조회/생성
+  useEffect(() => {
+    if (!user) {
+      setNickname(null);
+      return;
+    }
+    getOrCreateNickname(user.id)
+      .then(setNickname)
+      .catch(() => setNickname(null));
+  }, [user]);
 
   useEffect(() => {
     // 현재 세션 확인
@@ -37,7 +52,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, loading }}>
+    <AuthContext.Provider value={{ user, nickname, loading }}>
       {children}
     </AuthContext.Provider>
   );

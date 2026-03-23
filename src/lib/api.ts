@@ -1,6 +1,61 @@
 import { supabase } from "./supabase";
 import { EditRequest, PublicRestroom, Restroom, Review, UserRestroom } from "./types";
 
+// === 유저 프로필 (닉네임) ===
+
+/**
+ * 유저 닉네임 조회 — 없으면 user_metadata에서 가져와 프로필 생성
+ */
+export async function getOrCreateNickname(userId: string): Promise<string> {
+  // 1) 기존 프로필 조회
+  const { data: existing } = await supabase
+    .from("user_profiles")
+    .select("nickname")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (existing?.nickname) return existing.nickname;
+
+  // 2) 가입 시 설정한 닉네임을 user_metadata에서 가져옴
+  const { data: { user } } = await supabase.auth.getUser();
+  const metaNickname = user?.user_metadata?.nickname;
+
+  // fallback: 랜덤 닉네임 생성
+  const { generateRandomNickname } = await import("./nickname");
+  const nickname = metaNickname || generateRandomNickname();
+
+  // 3) 프로필 생성
+  const { data: created, error: insertError } = await supabase
+    .from("user_profiles")
+    .insert({ user_id: userId, nickname })
+    .select("nickname")
+    .single();
+
+  if (insertError) {
+    // 동시 insert 충돌 또는 unique 위반 시 다시 조회
+    const { data: retry } = await supabase
+      .from("user_profiles")
+      .select("nickname")
+      .eq("user_id", userId)
+      .maybeSingle();
+    return retry?.nickname ?? nickname;
+  }
+
+  return created.nickname;
+}
+
+/**
+ * 유저 닉네임 조회 (읽기 전용, 없으면 null)
+ */
+export async function getNickname(userId: string): Promise<string | null> {
+  const { data } = await supabase
+    .from("user_profiles")
+    .select("nickname")
+    .eq("user_id", userId)
+    .maybeSingle();
+  return data?.nickname ?? null;
+}
+
 // === 공공 화장실 DB 조회 ===
 
 /**

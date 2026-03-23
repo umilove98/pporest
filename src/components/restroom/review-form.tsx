@@ -14,7 +14,7 @@ interface ReviewFormProps {
 }
 
 export function ReviewForm({ restroomId, onSubmit }: ReviewFormProps) {
-  const { user } = useAuth();
+  const { user, nickname } = useAuth();
   const [rating, setRating] = useState(0);
   const [comment, setComment] = useState("");
   const [submitted, setSubmitted] = useState(false);
@@ -33,7 +33,7 @@ export function ReviewForm({ restroomId, onSubmit }: ReviewFormProps) {
         await createReview({
           restroom_id: restroomId,
           user_id: user.id,
-          user_name: user.user_metadata?.user_name || user.email || "익명",
+          user_name: nickname || "익명",
           rating,
           comment,
           has_photo: photoAdded,
