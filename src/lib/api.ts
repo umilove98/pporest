@@ -4,7 +4,39 @@ import { EditRequest, PublicRestroom, Restroom, Review, UserRestroom } from "./t
 // === 유저 프로필 (닉네임) ===
 
 /**
+ * DB 중복 검사 기반 유니크 닉네임 생성
+ * "맑은 숲지기" 가 이미 있으면 "맑은 숲지기 2", "맑은 숲지기 3" ... 순차 부여
+ */
+export async function generateUniqueNickname(): Promise<string> {
+  const { generateRandomNicknameBase } = await import("./nickname");
+  const base = generateRandomNicknameBase(); // "맑은 숲지기" (번호 없음)
+
+  // 동일 base로 시작하는 닉네임 중 가장 큰 번호 조회
+  const { data } = await supabase
+    .from("user_profiles")
+    .select("nickname")
+    .like("nickname", `${base}%`);
+
+  if (!data || data.length === 0) return base;
+
+  // 기존 번호 파싱
+  let maxNum = 0;
+  for (const row of data) {
+    if (row.nickname === base) {
+      maxNum = Math.max(maxNum, 1);
+    } else {
+      const suffix = row.nickname.slice(base.length).trim();
+      const num = parseInt(suffix, 10);
+      if (!isNaN(num)) maxNum = Math.max(maxNum, num);
+    }
+  }
+
+  return `${base} ${maxNum + 1}`;
+}
+
+/**
  * 유저 닉네임 조회 — 없으면 user_metadata에서 가져와 프로필 생성
+ * user_metadata에 항상 닉네임을 백업하여 DB 실패 시에도 동일 닉네임 유지
  */
 export async function getOrCreateNickname(userId: string): Promise<string> {
   // 1) 기존 프로필 조회
@@ -20,11 +52,16 @@ export async function getOrCreateNickname(userId: string): Promise<string> {
   const { data: { user } } = await supabase.auth.getUser();
   const metaNickname = user?.user_metadata?.nickname;
 
-  // fallback: 랜덤 닉네임 생성
-  const { generateRandomNickname } = await import("./nickname");
-  const nickname = metaNickname || generateRandomNickname();
+  // 3) metadata에도 없으면 유니크 랜덤 생성 후 metadata에 저장 (영구 고정)
+  let nickname: string;
+  if (metaNickname) {
+    nickname = metaNickname;
+  } else {
+    nickname = await generateUniqueNickname();
+    await supabase.auth.updateUser({ data: { nickname } });
+  }
 
-  // 3) 프로필 생성
+  // 4) user_profiles 테이블에 저장 시도
   const { data: created, error: insertError } = await supabase
     .from("user_profiles")
     .insert({ user_id: userId, nickname })
@@ -32,7 +69,7 @@ export async function getOrCreateNickname(userId: string): Promise<string> {
     .single();
 
   if (insertError) {
-    // 동시 insert 충돌 또는 unique 위반 시 다시 조회
+    // 동시 insert 충돌 시 다시 조회, 실패해도 metadata 닉네임 반환
     const { data: retry } = await supabase
       .from("user_profiles")
       .select("nickname")
@@ -72,27 +109,37 @@ export async function getAvatarUrl(userId: string): Promise<string | null> {
  * 프로필 사진 업로드 및 URL 저장
  */
 export async function updateAvatar(userId: string, file: File): Promise<string> {
+  // 파일 크기 제한 (5MB)
+  if (file.size > 5 * 1024 * 1024) {
+    throw new Error("사진 크기는 5MB 이하만 가능합니다.");
+  }
+
   const ext = file.name.split(".").pop() || "jpg";
-  const fileName = `avatars/${userId}/${Date.now()}.${ext}`;
+  // 본인 폴더에 고정 파일명으로 덮어쓰기
+  const fileName = `${userId}/profile.${ext}`;
 
   const { error: uploadError } = await supabase.storage
-    .from("restroom-photos")
+    .from("avatars")
     .upload(fileName, file, { contentType: file.type, upsert: true });
 
-  if (uploadError) throw uploadError;
+  if (uploadError) throw new Error(`사진 업로드 실패: ${uploadError.message}`);
 
   const { data } = supabase.storage
-    .from("restroom-photos")
+    .from("avatars")
     .getPublicUrl(fileName);
 
-  const avatarUrl = data.publicUrl;
+  // 브라우저 캐시 방지용 쿼리 파라미터
+  const avatarUrl = `${data.publicUrl}?t=${Date.now()}`;
 
-  const { error: updateError } = await supabase
+  // upsert로 user_profiles 행이 없어도 처리
+  const { error: upsertError } = await supabase
     .from("user_profiles")
-    .update({ avatar_url: avatarUrl })
-    .eq("user_id", userId);
+    .upsert(
+      { user_id: userId, avatar_url: avatarUrl },
+      { onConflict: "user_id" }
+    );
 
-  if (updateError) throw updateError;
+  if (upsertError) throw new Error(`프로필 저장 실패: ${upsertError.message}`);
 
   return avatarUrl;
 }
